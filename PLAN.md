@@ -32,22 +32,22 @@ path in `CLAUDE.md §5` becomes real.
 - [x] Move `CLAUDE.md`, `PLAN.md`, `SCHEMA.md` to that root. They stay at the top level for
       the life of the project; `README.md` joins them in Phase 7.
 - [x] `git init` in the project root; first commit with the three planning docs.
-- [ ] Create a GitHub repo (public — enables free CI and is part of the portfolio). Push.
-- [ ] Add `.gitignore` (Java/Maven, Node, `*.env`, `application-local.yml` if it holds
+- [~] Create a GitHub repo (public — enables free CI and is part of the portfolio). Push.
+- [x] Add `.gitignore` (Java/Maven, Node, `*.env`, `application-local.yml` if it holds
       secrets, `/target`, `/dist`, `/node_modules`, `.idea/` except `.idea/runConfigurations/`).
-- [ ] Add an MIT (or preferred) `LICENSE`.
+- [x] Add an MIT (or preferred) `LICENSE`.
 
 ### IntelliJ
 
-- [ ] Open the **project root** as the IntelliJ project (not `backend/`). Phase 1 adds
+- [x] Open the **project root** as the IntelliJ project (not `backend/`). Phase 1 adds
       `backend/pom.xml`, which IntelliJ then offers to import as a Maven module — accept.
       This keeps the docs, backend, frontend and mcp-server in one window.
-- [ ] Confirm **JDK 25** is installed and registered (*File → Project Structure → SDKs*;
+- [x] Confirm **JDK 25** is installed and registered (*File → Project Structure → SDKs*;
       IntelliJ can download Temurin 25 for you). Set the project SDK and language level
       to 25.
-- [ ] Confirm a Docker daemon is running and visible in the **Services** tool window —
+- [x] Confirm a Docker daemon is running and visible in the **Services** tool window —
       Testcontainers in Phase 1 depends on it.
-- [ ] Commit `.idea/runConfigurations/` only; gitignore the rest of `.idea/`.
+- [x] Commit `.idea/runConfigurations/` only; gitignore the rest of `.idea/`.
 
 ### Domain
 - [ ] Register a domain (Cloudflare/Namecheap, ~$10/yr). Record it in `CLAUDE.md §2`.
@@ -126,42 +126,42 @@ auth yet** (added in Phase 2).
 **Prerequisites:** Phase 0 (Atlas URI). Docker installed locally (for Testcontainers).
 
 ### Project setup
-- [ ] Scaffold with **IntelliJ's Spring Initializr**: *File → New → Module → Spring Boot*,
+- [x] Scaffold with **IntelliJ's Spring Initializr**: *File → New → Module → Spring Boot*,
       with the project root already open. Location `backend/`, Maven, **Java 25**, Spring
       Boot **4.0.x**, group `dev.duynguyen`, artifact `jobtracker`, package
       `dev.duynguyen.jobtracker`. Dependencies: Spring Web, Spring Data MongoDB,
       Validation, Spring Boot Actuator, Testcontainers. (Equivalent to
       [start.spring.io](https://start.spring.io) if you'd rather generate and unzip.)
-- [ ] **Skip Lombok.** `CLAUDE.md §11` already mandates constructor injection with `final`
+- [x] **Skip Lombok.** `CLAUDE.md §11` already mandates constructor injection with `final`
       fields and records for DTOs, and `SCHEMA.md §11` explains why `@Document` classes are
       mutable — Lombok would save a handful of getters at the cost of an annotation
       processor to configure, another JDK-25 compatibility surface, and a tool the owner
       would have to debug. IntelliJ generates getters/setters on demand anyway.
-- [ ] Add `springdoc-openapi-starter-webmvc-ui` — **pin the 3.x line**. springdoc 2.x
+- [x] Add `springdoc-openapi-starter-webmvc-ui` — **pin the 3.x line**. springdoc 2.x
       targets Boot 3 / Spring Framework 6 and will fail on Boot 4. Verify the app starts
       and `/swagger-ui.html` renders *before* writing controllers; a version mismatch here
       is much easier to diagnose on an empty app.
-- [ ] Add `micrometer-registry-datadog`, **and immediately set
+- [x] Add `micrometer-registry-datadog`, **and immediately set
       `management.datadog.metrics.export.enabled: false` in `application.yml`**. The
       dependency is not inert: the registry auto-configures on classpath presence and fails
       context creation with `apiKey was 'null' but it is required`, breaking every
       `@SpringBootTest` from here until Phase 5 configures it. `application-prod.yml` flips
       it back to `true`.
-- [ ] Import `testcontainers-bom` in `<dependencyManagement>` — the Boot parent does not
+- [x] Import `testcontainers-bom` in `<dependencyManagement>` — the Boot parent does not
       manage Testcontainers module versions. Note the 2.x artifact names:
       `testcontainers-junit-jupiter` and `testcontainers-mongodb` (the 1.x names
       `junit-jupiter` / `mongodb`, which most snippets still use, will not resolve).
-- [ ] `pom.xml`: set `<java.version>25</java.version>`; confirm `spring-boot-maven-plugin`
+- [x] `pom.xml`: set `<java.version>25</java.version>`; confirm `spring-boot-maven-plugin`
       present; add `maven-failsafe-plugin` for `*IT` tests.
-- [ ] `application.yml` + `application-local.yml` + `application-prod.yml` per
+- [x] `application.yml` + `application-local.yml` + `application-prod.yml` per
       `CLAUDE.md §8`. Local points at `mongodb://localhost:27017/jobtracker`.
-- [ ] `application.yml`: `management.endpoints.web.exposure.include=health` (day one, not a
+- [x] `application.yml`: `management.endpoints.web.exposure.include=health` (day one, not a
       Phase 7 polish step). `application-prod.yml`: `springdoc.api-docs.enabled=false` and
       `springdoc.swagger-ui.enabled=false` — Swagger must not be reachable on the public
       domain (`CLAUDE.md §6`).
-- [ ] IntelliJ **run configuration**: Spring Boot → `JobTrackerApplication`, *Active
+- [x] IntelliJ **run configuration**: Spring Boot → `JobTrackerApplication`, *Active
       profiles* `local`. Commit it under `.idea/runConfigurations/`.
-- [ ] Commit the generated skeleton on branch `phase-1-backend-crud`.
+- [~] Commit the generated skeleton on branch `phase-1-backend-crud`.
 
 ### Domain layer (`company/`, `application/`, `common/enums/`)
 - [ ] `Company` `@Document("companies")` class + `Contact` POJO (see `SCHEMA.md §2, §4.1`).
