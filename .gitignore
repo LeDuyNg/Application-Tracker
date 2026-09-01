@@ -22,10 +22,39 @@ dist-ssr/
 *.local
 npm-debug.log*
 
+# ---- Logs ----
+*.log
+
+# ---- Editors (other than IntelliJ, above) ----
+.vscode/
+
 # ---- Secrets ----
 # Prod config lives in /etc/jobtracker/jobtracker.env on the VPS; nothing secret is
 # committed. application-local.yml reads from env vars, so it is safe to commit as-is —
-# if you ever paste a real secret into it, add it here immediately.
+# if you ever paste a real Atlas URI or client secret into it while debugging, move the
+# value to an env var rather than committing it.
+#
+# Any .env: `.env` alone would miss jobtracker.env / prod.env / mcp-server/.env.
+*.env
 .env
 .env.*
 !.env.example
+!*.env.example
+
+# Key material. The Phase 4 CI deploy key and any TLS/keystore file must never land here.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ecdsa*
+id_ed25519*
+*.ppk
+
+# Database dumps — the Phase 4 mongodump archives contain recruiter names, emails and
+# phone numbers plus your own comp expectations. Never commit one.
+dump/
+*.archive
+*.archive.gz
