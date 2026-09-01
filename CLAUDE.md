@@ -353,9 +353,13 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 - **Testcontainers 2.x renamed its modules** — `junit-jupiter` → `testcontainers-junit-
   jupiter`, `mongodb` → `testcontainers-mongodb` — and the Boot parent does not manage
   their versions, so `testcontainers-bom` is imported explicitly.
-- **JDK 25 is still not installed on the dev machine** (only 26.0.x). Maven cross-compiles
-  with `--release 25` so the build passes, but local runtime ≠ the VPS's Temurin 25.
-  Install JDK 25 and point `JAVA_HOME` and the IntelliJ project SDK at it. Open item.
+- **JDK 25 is installed (Homebrew `openjdk@25`, 25.0.4.1) and IntelliJ already uses it**
+  (SDK `homebrew-25`, language level 25). It is *not* symlinked into
+  `/Library/Java/JavaVirtualMachines`, so `/usr/libexec/java_home -V` does not list it —
+  which is misleading. The **shell** still defaults to JDK 26, so `./mvnw` from a terminal
+  cross-compiles with `--release 25` while IntelliJ compiles on 25. Set
+  `JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home` in
+  `~/.zshrc` so both agree.
 
 ---
 
