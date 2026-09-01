@@ -50,7 +50,7 @@ Four deliverables, all built around one data store:
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
-| **Live URL** | _not deployed yet_ (`https://<your-domain>` once Phase 4 is done) |
+| **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
 | **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — local commits not yet pushed. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
@@ -355,6 +355,15 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 - **Testcontainers 2.x renamed its modules** — `junit-jupiter` → `testcontainers-junit-
   jupiter`, `mongodb` → `testcontainers-mongodb` — and the Boot parent does not manage
   their versions, so `testcontainers-bom` is imported explicitly.
+- **MongoDB connection properties moved to `spring.mongodb.*` in Boot 4.** The Boot 3
+  prefix `spring.data.mongodb.*` is deprecated at level **`error`** since 4.0.0, which
+  means it is *not bound at all* — it does not warn, it silently falls back to the default
+  `mongodb://localhost/test`. Found because `IndexInitializer` reported creating all nine
+  indexes while `jobtracker.companies` did not exist: they had gone into a `test` database.
+  In prod this would have pointed the app at a `test` database on Atlas. The whole family
+  moved (`uri`, `database`, `host`, `port`, `username`, `password`, `ssl.*`,
+  `replica-set-name`, …). **Exception:** `spring.data.mongodb.auto-index-creation` stays
+  where it is — it is a Spring Data concern, not a connection one.
 - **JDK 25 is installed (Homebrew `openjdk@25`, 25.0.4.1) and IntelliJ already uses it**
   (SDK `homebrew-25`, language level 25). It is *not* symlinked into
   `/Library/Java/JavaVirtualMachines`, so `/usr/libexec/java_home -V` does not list it —

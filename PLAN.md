@@ -50,8 +50,8 @@ path in `CLAUDE.md §5` becomes real.
 - [x] Commit `.idea/runConfigurations/` only; gitignore the rest of `.idea/`.
 
 ### Domain
-- [ ] Register a domain (Cloudflare/Namecheap, ~$10/yr). Record it in `CLAUDE.md §2`.
-- [ ] Nothing to point at yet — DNS comes in Phase 4.
+- [x] Register a domain (Cloudflare/Namecheap, ~$10/yr). Record it in `CLAUDE.md §2`.
+- [x] Nothing to point at yet — DNS comes in Phase 4.
 
 ### Oracle Cloud
 - [ ] Create an "Always Free" account (needs a card for identity; not charged for
