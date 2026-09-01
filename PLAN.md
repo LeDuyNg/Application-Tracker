@@ -164,36 +164,39 @@ auth yet** (added in Phase 2).
 - [~] Commit the generated skeleton on branch `phase-1-backend-crud`.
 
 ### Domain layer (`company/`, `application/`, `common/enums/`)
-- [ ] `Company` `@Document("companies")` class + `Contact` POJO (see `SCHEMA.md §2, §4.1`).
-- [ ] `Application` `@Document("applications")` class + `Stage`, `Compensation` POJOs
+- [x] `Company` `@Document("companies")` class + `Contact` POJO (see `SCHEMA.md §2, §4.1`).
+- [x] `Application` `@Document("applications")` class + `Stage`, `Compensation` POJOs
       (`SCHEMA.md §3, §4.2, §4.3`).
-- [ ] Enums in `common/enums/`: `ApplicationStatus`, `ApplicationSource`, `WorkMode`,
+- [x] Enums in `common/enums/`: `ApplicationStatus`, `ApplicationSource`, `WorkMode`,
       `StageType`, `StageStatus`, `StageFormat` (`SCHEMA.md §5`). **Declare `StageType`'s
       constants in `SCHEMA.md §5`'s exact order** — that order is the funnel's progression
       order and the stats output depends on it.
-- [ ] `@EnableMongoAuditing` config; `@CreatedDate` / `@LastModifiedDate` on the `Instant`
+- [x] `@EnableMongoAuditing` config; `@CreatedDate` / `@LastModifiedDate` on the `Instant`
       fields.
-- [ ] Index creation: an `IndexInitializer` `ApplicationRunner` in `config/` that ensures
+- [x] Index creation: an `IndexInitializer` `ApplicationRunner` in `config/` that ensures
       every index in `SCHEMA.md §6` via `IndexOperations` (preferred over annotation
       auto-creation for explicitness). Log what it creates. **No text index** — free-text
       search uses a regex (`SCHEMA.md §6`, §10.3).
 
 ### Repositories
-- [ ] `CompanyRepository extends MongoRepository<Company, String>` — plus
+- [x] `CompanyRepository extends MongoRepository<Company, String>` — plus
       `Optional<Company> findByNameIgnoreCase(String name)`.
-- [ ] `ApplicationRepository extends MongoRepository<Application, String>` — derived
+- [x] `ApplicationRepository extends MongoRepository<Application, String>` — derived
       queries where they're simple (`findByCompanyId`, `findByStatus`).
-- [ ] Anything involving `stages[]` traversal, text search, or grouping goes through
+- [x] Anything involving `stages[]` traversal, text search, or grouping goes through
       `MongoTemplate` in the service, not derived queries.
 
 ### DTOs + mappers (`*/dto/`)
-- [ ] Request records: `CreateCompanyRequest`, `UpdateCompanyRequest`,
+- [x] Request records: `CreateCompanyRequest`, `UpdateCompanyRequest`,
       `CreateApplicationRequest`, `UpdateApplicationRequest`, `AddStageRequest`,
       `UpdateStageRequest`. Bean Validation annotations per `SCHEMA.md §8.1`.
-- [ ] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
+- [~] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
       `ApplicationSummaryResponse` (compact, for lists/search), `StatsResponse`,
-      `UpcomingInterviewResponse`, `FollowupResponse`.
-- [ ] Hand-written `CompanyMapper`, `ApplicationMapper` (no MapStruct).
+      `UpcomingInterviewResponse`, `FollowupResponse`.  
+      *(Done: `CompanyResponse`, `ApplicationResponse`, `ApplicationSummaryResponse`.
+      `StatsResponse`, `UpcomingInterviewResponse` and `FollowupResponse` are written with
+      the services that produce them.)*
+- [x] Hand-written `CompanyMapper`, `ApplicationMapper` (no MapStruct).
 
 ### Services
 - [ ] `CompanyService`: CRUD. `delete` **blocks with 409** when applications reference the

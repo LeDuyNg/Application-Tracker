@@ -28,7 +28,7 @@ one round trip renders the whole pipeline."*
 | Denormalized field | Lives on | Source of truth | Sync rule |
 |---|---|---|---|
 | `companyName` | `applications` | `companies.name` | Updated for all of a company's applications whenever the company is renamed (service-layer logic). |
-| `applications.status` | `applications` | the history in `stages[]` + explicit user action | Set by the service when a terminal stage is added (a `FAILED` stage → `REJECTED`, an accepted `OFFER` → `ACCEPTED`) or by an explicit status change. **Terminal statuses are sticky** — see below. |
+| `applications.status` | `applications` | the history in `stages[]` + explicit user action | Derived: any `FAILED` stage → `REJECTED`; else an `OFFER`-type stage that `PASSED` → `OFFER`; else `ACTIVE`. **`ACCEPTED`, `WITHDRAWN` and `GHOSTED` are never derived** — each is a decision you make that leaves no trace in the stage data, so each is set explicitly. **Terminal statuses are sticky** — see below. |
 | `applications.currentStageType` | `applications` | `stages[]` | Recomputed on every stage add/update: the `type` of the stage with the **lowest `sequence`** whose status is `SCHEDULED` or `EXPECTED`; if none, the `type` of the stage with the **highest `sequence`** that is `PASSED`. |
 | `applications.lastContactAt` | `applications` | `stages[]` | Set to "now" by the service **only** when a stage is added, or an existing stage's `status`, `scheduledAt` or `completedAt` changes. Never touched by edits to notes, tags, comp, or any other field. |
 
