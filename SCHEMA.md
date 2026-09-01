@@ -345,7 +345,7 @@ they're defined for correctness of practice and as an interview talking point.
 
 | Field | Type | Rationale |
 |---|---|---|
-| `appliedDate`, `followUpDate` | `LocalDate` (BSON date at UTC midnight) | Date-only semantics; avoids off-by-one bugs in "this month" math. |
+| `appliedDate`, `followUpDate` | `LocalDate` (BSON date at UTC midnight) | Date-only semantics; avoids off-by-one bugs in "this month" math. **Enforced by explicit converters in `config/MongoConfig`** — Spring Data's default converts `LocalDate` using the *JVM's* default timezone, so the stored instant would otherwise depend on where the process runs (`00:00Z` on the UTC VPS, `07:00Z` on a laptop in Los Angeles) and date arithmetic would give different answers in dev and prod from identical data. |
 | `stages[].scheduledAt`, `stages[].completedAt` | `Instant` (UTC) | True points in time. |
 | `createdAt`, `updatedAt` | `Instant` (UTC) | Auditing. |
 

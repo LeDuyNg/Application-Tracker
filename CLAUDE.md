@@ -355,6 +355,13 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 - **Testcontainers 2.x renamed its modules** — `junit-jupiter` → `testcontainers-junit-
   jupiter`, `mongodb` → `testcontainers-mongodb` — and the Boot parent does not manage
   their versions, so `testcontainers-bom` is imported explicitly.
+- **`LocalDate` storage must be pinned to UTC with explicit converters.** Spring Data
+  converts `LocalDate` to a BSON date using the **JVM's default timezone**, so the same
+  `appliedDate` is stored as a different instant depending on where the process runs — and
+  every "days to first response" or date-range calculation then differs between a dev
+  laptop and the UTC VPS, from identical data. `config/MongoConfig` registers
+  reading/writing converters fixed to UTC midnight. Found by `StatsServiceIT`, which
+  produced 5.1 average days locally against a hand-derived 5.4.
 - **MongoDB connection properties moved to `spring.mongodb.*` in Boot 4.** The Boot 3
   prefix `spring.data.mongodb.*` is deprecated at level **`error`** since 4.0.0, which
   means it is *not bound at all* — it does not warn, it silently falls back to the default
