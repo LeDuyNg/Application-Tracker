@@ -2,9 +2,11 @@
 .DS_Store
 
 # ---- IntelliJ ----
+# Leading **/ so this matches .idea at any depth, not just the repo root — IntelliJ
+# creates one wherever a project is opened (e.g. backend/.idea if you open backend/).
 # Run configurations are shared deliberately (PLAN.md Phase 0); everything else is local.
-.idea/*
-!.idea/runConfigurations/
+**/.idea/*
+!**/.idea/runConfigurations/
 *.iml
 *.iws
 *.ipr
