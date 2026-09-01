@@ -374,9 +374,22 @@ Jakarta Bean Validation on request DTOs:
 
 - `company`: `name` `@NotBlank @Size(max=120)`; `email` on contacts `@Email`.
 - `application`: `companyId` `@NotBlank`; `role` `@NotBlank @Size(max=160)`;
-  `appliedDate` `@NotNull @PastOrPresent`; `source` `@NotNull`; `status` `@NotNull`;
-  `stages` `@NotEmpty @Valid`.
-- `stage`: `type` `@NotNull`; `status` `@NotNull`; `sequence` `@Positive`.
+  `appliedDate` `@NotNull @PastOrPresent`; `source` `@NotNull`.
+  - On **create**, `status` and `stages` are **optional**, and this is deliberate. Requiring
+    `status` would make the documented `ACTIVE` default (§3) unreachable, and requiring a
+    non-empty `stages` would make the service's "seed an `APPLICATION_SUBMITTED` stage on
+    create" behaviour dead code — and would force the Phase 4 backfill to hand-build a
+    submission stage for every historical application. The **entity** still always has at
+    least one stage; the *service* guarantees that, not the caller.
+  - On **update** (`PUT`), `status` is `@NotNull` — a full replacement sends it — and
+    `stages` is **absent from the DTO entirely**. Rounds are managed only through the stage
+    sub-resource, so exactly one code path mutates them and maintains `currentStageType`,
+    `lastContactAt` and the derived `status`. A `PUT` that replaced the array wholesale
+    would be a second path repeating all three rules, and would discard the `stageId`s the
+    SPA and MCP server hold references to.
+- `stage`: `type` `@NotNull`; `status` `@NotNull`; `sequence` `@Positive` **and optional**
+  — omitted means "append at the end", which is the normal case; supply it only to insert a
+  round out of order.
   **`scheduledAt` is deliberately *not* `@Future`.** Backfilling the job search already in
   progress (Phase 4) means entering applications already sent and interviews already held;
   a future-only constraint would reject exactly that data. The only rule is `scheduledAt`
