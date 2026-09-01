@@ -26,12 +26,12 @@ The project does not exist yet. `CLAUDE.md`, `PLAN.md` and `SCHEMA.md` currently
 their own; the first task is to create the project root and move them into it, so every
 path in `CLAUDE.md §5` becomes real.
 
-- [ ] Choose the project root directory (`Application-Tracker/`). The backend, frontend and
+- [x] Choose the project root directory (`Application-Tracker/`). The backend, frontend and
       mcp-server directories become siblings *inside* it — the root is **not** the Spring
       Boot project itself.
-- [ ] Move `CLAUDE.md`, `PLAN.md`, `SCHEMA.md` to that root. They stay at the top level for
+- [x] Move `CLAUDE.md`, `PLAN.md`, `SCHEMA.md` to that root. They stay at the top level for
       the life of the project; `README.md` joins them in Phase 7.
-- [ ] `git init` in the project root; first commit with the three planning docs.
+- [x] `git init` in the project root; first commit with the three planning docs.
 - [ ] Create a GitHub repo (public — enables free CI and is part of the portfolio). Push.
 - [ ] Add `.gitignore` (Java/Maven, Node, `*.env`, `application-local.yml` if it holds
       secrets, `/target`, `/dist`, `/node_modules`, `.idea/` except `.idea/runConfigurations/`).

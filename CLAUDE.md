@@ -46,11 +46,13 @@ Four deliverables, all built around one data store:
 
 | | |
 |---|---|
-| **Current phase** | Phase 0 — not started |
+| **Current phase** | **Phase 1 — backend CRUD.** Project setup done (scaffold builds, `mvn verify` green); domain layer is the next task. |
+| **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://<your-domain>` once Phase 4 is done) |
-| **Repo** | Not yet created. Phase 0 scaffolds the project, moves these three `.md` files to the project root, and runs `git init` there. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — local commits not yet pushed. |
+| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
 
