@@ -103,8 +103,8 @@ Update this table at the end of every working session.
 ### Deployment / infra
 | Thing | Choice | Notes |
 |---|---|---|
-| Host | **Oracle Cloud "Always Free" — Ampere A1 (ARM64)** | Effective always-on budget ≈ **2 OCPU / 12 GB RAM**, one VM (1,500 OCPU-hrs + 9,000 GB-hrs per month). |
-| OS | **Ubuntu 24.04 (arm64)** | Default login user `ubuntu`. |
+| Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** Two of these are always free. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
+| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for `dd-trace-java` and any native dependency. |
 | Runtime deploy | **Fat JAR + `systemd`** — **no Docker on the VPS** | Mongo is managed (Atlas), so the box only runs the API + Nginx; Docker's parity/autodiscovery wins don't apply and it costs memory. |
 | Reverse proxy / TLS | **Nginx + certbot (Let's Encrypt)** | Same pattern the owner used on a prior project. Serves the SPA static build and proxies `/api`, `/oauth2`, `/login` to `127.0.0.1:8080`. |
 | CI/CD | **GitHub Actions** | `mvn verify` → `mvn package` → `scp` JAR to the VPS → `ssh systemctl restart`. Frontend: `npm run build` → `rsync dist/` → `/var/www/jobtracker`. |
@@ -116,7 +116,7 @@ Update this table at the end of every working session.
 
 ```
                          ┌──────────────────────────────────────────┐
-                         │        Oracle Cloud A1 VPS (Ubuntu)       │
+                         │   Oracle E2.1.Micro VPS (Ubuntu, 1 GB)    │
                          │                                          │
   Browser ───HTTPS──────▶│  Nginx  ──/──────▶  React static build   │
    (you)                 │   :443   ──/api────▶ ┐                   │
@@ -283,7 +283,9 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   pack gives Pro for 10 hosts free for 2 years, with ~13-month metric retention instead of
   the free tier's 1 day — which is what makes an "applications created over time" widget
   worth screenshotting at all. With host slots free, the Agent runs permanently and we get
-  A1 host infra metrics (CPU/memory/disk) alongside the app's custom metrics for nothing.
+  host infra metrics (CPU/memory/disk) alongside the app's custom metrics for nothing.
+  *(**Superseded** by the host-change entry below — the Agent does not fit on a 1 GB box.
+  The APM-is-a-separate-SKU half still stands.)*
   **APM is unchanged and still trial-only**: it is a separate paid SKU (~$31/host/mo) and
   is *not* part of Pro, student pack or otherwise. Micrometer's registry pushes over the
   API and does not depend on the Agent, so it stays as-is either way.
@@ -334,6 +336,34 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   `-XX:MaxRAMPercentage=50` rather than a hardcoded `-Xmx` so the unit survives a resize.
 - **`CorsConfig` deleted from the planned layout.** Prod is same-origin behind Nginx and
   dev goes through the Vite proxy, so CORS is never exercised. It was dead code.
+
+### 2026-09-01 — Host changed to the AMD micro shape
+
+- **`VM.Standard.E2.1.Micro` (1/8 OCPU burstable to 1, 1 GB RAM, x86) instead of Ampere A1
+  (2 OCPU / 12 GB).** Not a preference — A1 capacity was unobtainable in the home region,
+  and Always Free resources exist only in the home region, so waiting or switching region
+  were the alternatives. Two E2 micros are always free and are reliably available.
+  Accepted trade-offs: a tuned JVM, mandatory swap, and no room for the Datadog Agent on
+  the app host. Rejected: paying ~€4/mo for a Hetzner box (keeps the project genuinely
+  free), and retrying A1 indefinitely (the job search has its own clock).
+- **JVM sizing changes with it.** `-XX:MaxRAMPercentage=50` would hand a 1 GB box a 512 MB
+  heap, which leaves nothing for metaspace, thread stacks, code cache, Nginx and the OS.
+  Explicit `-Xmx256m` plus a capped metaspace instead. The collector is **SerialGC**, which
+  the JVM already selects on a 1-core sub-2 GB machine — G1 is the wrong choice at this
+  size, so the earlier "G1, not ZGC" entry now reads "SerialGC, and let ergonomics pick it".
+- **2 GB swap is load-bearing, not a safety net** — but the app must not live in it. The
+  boot volume is network-attached, so steady-state swapping would be very slow. Size the
+  heap so swap is only ever touched under a spike; set `vm.swappiness=10`.
+- **The Datadog Agent no longer runs on the app host.** This reverses the "Agent stays
+  permanently" part of the student-pack entry above: ~0.5 GB RSS does not fit beside a JVM
+  in 1 GB. Custom metrics are unaffected — Micrometer pushes to the Datadog API over HTTPS
+  and never needed an agent. What is lost is host infra metrics for the app box.
+- **APM, if it happens, uses the second free micro.** `dd-trace-java` needs an Agent to
+  send traces to, but that Agent does not have to be local: run it on the second E2 micro
+  and point the JVM at it with `DD_AGENT_HOST=<private IP>` over the VCN. Costs nothing,
+  keeps the app host clean, and the javaagent's own overhead (~50–100 MB) is the only thing
+  the app box pays. If even that proves too tight, the fallback is to capture APM
+  screenshots from a local run during the trial and say so plainly in the README.
 
 ### 2026-09-01 — Backend scaffolded
 
@@ -503,15 +533,17 @@ Two IntelliJ-specific gotchas for this stack:
 
 Full steps in `deploy/RUNBOOK.md` (written in Phase 4). Summary:
 
-1. Oracle A1 instance, Ubuntu 24.04, **reserved** public IP. Open 80/443 in the VCN
+1. Oracle `VM.Standard.E2.1.Micro` instance, Ubuntu 24.04 x86_64, **reserved** public IP.
+   Open 80/443 in the VCN
    Security List **and** in the instance's iptables (Ubuntu Oracle images block them by
    default).
 2. Install Temurin 25, Nginx, certbot. Add a 2 GB swap file.
 3. `systemd` unit `jobtracker.service` runs
-   `java -XX:MaxRAMPercentage=50 -jar /opt/jobtracker/app.jar` with
-   `EnvironmentFile=/etc/jobtracker/jobtracker.env`. Default G1 collector — **not** ZGC
-   (see §6). A percentage rather than a hardcoded `-Xmx` so the unit survives a resize;
-   the JVM's own default is 25% of RAM, which is fine but leaves headroom unused.
+   `java -Xmx256m -XX:MaxMetaspaceSize=128m -Xss512k -jar /opt/jobtracker/app.jar` with
+   `EnvironmentFile=/etc/jobtracker/jobtracker.env`. **SerialGC** (the JVM's own choice on a
+   1-core sub-2 GB machine — don't override it), and an explicit `-Xmx` rather than
+   `MaxRAMPercentage`, which on 1 GB would leave nothing for metaspace, stacks and Nginx.
+   See §6.
 4. Nginx vhost: certbot TLS, serve `/var/www/jobtracker`, proxy `/api` `/oauth2` `/login`
    → `127.0.0.1:8080`.
 5. Atlas: add the VPS's public IP to the Network Access allowlist.

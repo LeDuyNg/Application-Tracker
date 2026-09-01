@@ -56,9 +56,15 @@ path in `CLAUDE.md §5` becomes real.
 ### Oracle Cloud
 - [ ] Create an "Always Free" account (needs a card for identity; not charged for
       Always-Free resources).
-- [ ] Create a VM: **Ampere A1 (arm64)**, shape `VM.Standard.A1.Flex`, **2 OCPU / 12 GB**,
-      **Ubuntu 24.04**, ~50 GB boot volume. (A1 capacity is often "out of stock" — retry
-      the create, or try another availability domain / region.)
+- [ ] Create a VM: **`VM.Standard.E2.1.Micro`** (AMD x86), **1/8 OCPU burstable to 1,
+      1 GB RAM**, **Ubuntu 24.04 (x86_64)**, ~50 GB boot volume.
+      *A1 was the original choice and is unobtainable — see `CLAUDE.md §6`. Always Free
+      resources exist only in your home region, so a different region is not a workaround.*
+- [ ] Note you get **two** of these free. Leave the second uncreated for now; Phase 5 uses
+      it to host the Datadog Agent during the APM trial, keeping it off the app box.
+- [ ] Expect a slow first boot and slow `apt` operations — 1/8 OCPU baseline. It bursts to a
+      full OCPU, which covers JVM startup and request handling; sustained CPU work is what
+      it cannot do. Single-user traffic is well within it.
 - [ ] Assign a **reserved public IP** (not ephemeral) to the instance.
 - [ ] Add your SSH public key during creation; confirm `ssh ubuntu@<ip>` works.
 - [ ] **Open ports 80 and 443** — this is two steps:
@@ -66,7 +72,10 @@ path in `CLAUDE.md §5` becomes real.
   - [ ] On the instance: the Ubuntu image ships iptables rules that also block them —
         add `iptables` ACCEPT rules for 80/443 and persist with `netfilter-persistent
         save` (exact commands go in `deploy/RUNBOOK.md` in Phase 4).
-- [ ] Add a **2 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`).
+- [ ] Add a **2 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`), and set
+      `vm.swappiness=10` in `/etc/sysctl.d/`. On 1 GB this is load-bearing, not a safety
+      net — but the heap is sized so the app does not *live* in swap: the boot volume is
+      network-attached and steady-state swapping would be painfully slow.
 
 ### MongoDB Atlas
 - [ ] Create a free account and an **M0** cluster (pick the region closest to the Oracle
@@ -193,9 +202,9 @@ auth yet** (added in Phase 2).
 - [~] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
       `ApplicationSummaryResponse` (compact, for lists/search), `StatsResponse`,
       `UpcomingInterviewResponse`, `FollowupResponse`.  
-      *(Done: `CompanyResponse`, `ApplicationResponse`, `ApplicationSummaryResponse`.
-      `StatsResponse`, `UpcomingInterviewResponse` and `FollowupResponse` are written with
-      the services that produce them.)*
+      *(Done: `CompanyResponse`, `ApplicationResponse`, `ApplicationSummaryResponse`,
+      `StatsResponse`. `UpcomingInterviewResponse` and `FollowupResponse` are written
+      with the queries that produce them.)*
 - [x] Hand-written `CompanyMapper`, `ApplicationMapper` (no MapStruct).
 
 ### Services
@@ -218,8 +227,8 @@ auth yet** (added in Phase 2).
   - `lastContactAt` = now, but **only** when a stage is added or an existing stage's
     `status`/`scheduledAt`/`completedAt` changes — never on note/tag/comp edits. This is
     the field the "gone quiet" query depends on; `updatedAt` cannot serve.
-- [ ] Stage operations: `addStage`, `updateStage(stageId, ...)`, `deleteStage(stageId)`.
-- [ ] `StatsService` (in `stats/`): the `$facet` aggregation from `SCHEMA.md §10.1`;
+- [x] Stage operations: `addStage`, `updateStage(stageId, ...)`, `deleteStage(stageId)`.
+- [x] `StatsService` (in `stats/`): the `$facet` aggregation from `SCHEMA.md §10.1`;
       compute rates in Java per `SCHEMA.md §9`.
 - [ ] Follow-ups query (`SCHEMA.md §10.2`) — both halves: `followUpDate` due, **and** the
       gone-quiet union on `lastContactAt`, tagged in the response so the two groups are
@@ -228,7 +237,7 @@ auth yet** (added in Phase 2).
 - [ ] Free-text search as an **escaped** case-insensitive regex over `companyName` / `role`
       / `notes` (`SCHEMA.md §10.3`). `Pattern.quote` the user's input — an unescaped `(` is
       a 500 and a pathological pattern is a cheap DoS.
-- [ ] `TimeService` in `common/` wrapping a `Clock` + `app.timezone` for all relative-date
+- [x] `TimeService` in `common/` wrapping a `Clock` + `app.timezone` for all relative-date
       math (`SCHEMA.md §7`).
 
 ### Controllers (REST)
@@ -249,21 +258,21 @@ auth yet** (added in Phase 2).
       `ProblemDetail`; map `NoSuchElementException`/custom `NotFoundException` → 404,
       `MethodArgumentNotValidException` → 400 with field errors, custom
       `ValidationException` → 400, `IllegalStateException` for the delete-conflict → 409.
-- [ ] Date serialization: `spring.jackson.datatype.datetime.write-dates-as-timestamps:
+- [x] Date serialization: `spring.jackson.datatype.datetime.write-dates-as-timestamps:
       false` — **not** the Boot 3 key `spring.jackson.serialization.*`, which fails the
       context load on Jackson 3 (`SCHEMA.md §11`).
 
 ### Tests
-- [ ] `AbstractMongoIT` base class: `@SpringBootTest` + `@Testcontainers` with
+- [x] `AbstractMongoIT` base class: `@SpringBootTest` + `@Testcontainers` with
       `MongoDBContainer("mongo:8")` wired via `@ServiceConnection` — match the Atlas major
       version so you don't discover a behaviour difference in prod.
-- [ ] `ApplicationServiceTest` (unit, mocks): stage sequencing, `companyId` validation, and
+- [x] `ApplicationServiceTest` (unit, mocks): stage sequencing, `companyId` validation, and
       one test per denormalization rule — `currentStageType` picks the lowest pending
       sequence (not the latest), a `WITHDRAWN` application stays `WITHDRAWN` after an
       unrelated stage edit, and `lastContactAt` moves on a stage status change but **not**
       on a notes edit.
 - [ ] `ApplicationControllerIT`: happy path for every endpoint + 404 + 400 cases.
-- [ ] `StatsServiceIT`: seed ~10 applications across statuses/stages, assert the funnel and
+- [x] `StatsServiceIT`: seed ~10 applications across statuses/stages, assert the funnel and
       each rate from `SCHEMA.md §9`.
 - [ ] `UpcomingInterviewsIT`, `FollowupsIT`: boundary cases (exactly `days` away, terminal
       statuses excluded).
@@ -537,13 +546,18 @@ schema and validation problems, and the app is useless for dogfooding while it's
       `DD_API_KEY`, `DD_SITE`).
 
 ### systemd
-- [ ] `deploy/jobtracker.service`: `ExecStart=/usr/bin/java -XX:MaxRAMPercentage=50 -jar
-      /opt/jobtracker/app.jar`, `EnvironmentFile=/etc/jobtracker/jobtracker.env`,
+- [ ] `deploy/jobtracker.service`: `ExecStart=/usr/bin/java -Xmx256m -XX:MaxMetaspaceSize=128m
+      -Xss512k -jar /opt/jobtracker/app.jar`, `EnvironmentFile=/etc/jobtracker/jobtracker.env`,
       `User=jobtracker`, `Restart=on-failure`, `SuccessExitStatus=143`. Install to
       `/etc/systemd/system/`, `daemon-reload`, `enable --now`.
-      **Default G1 — not ZGC** (`CLAUDE.md §6`): ZGC targets large heaps and low pause
-      times at a footprint and CPU cost a 2-OCPU box with a ~6 GB heap cannot justify.
-      A percentage rather than a hardcoded `-Xmx` so the unit survives a resize.
+      **Explicit `-Xmx`, not `MaxRAMPercentage`** on a 1 GB box: 50% would be a 512 MB heap
+      with nothing left for metaspace, thread stacks, code cache, Nginx and the OS.
+      **SerialGC**, which the JVM already picks on a 1-core sub-2 GB machine — don't
+      override it (`CLAUDE.md §6`).
+- [ ] After first deploy, check real usage: `systemctl status jobtracker` for RSS, `free -m`
+      for swap. If the app is sitting in swap at idle, drop `-Xmx` further rather than
+      adding swap. Consider `-XX:TieredStopAtLevel=1` if startup is painfully slow — it
+      trades steady-state throughput for faster warmup, a good deal for one user.
 
 ### Nginx + TLS
 - [ ] `deploy/nginx-jobtracker.conf`: server for `<your-domain>`; `root
@@ -598,11 +612,12 @@ restore succeeded. **You start entering real applications.**
 - Oracle's double firewall (Security List **and** instance iptables) is the #1 "site
   unreachable" cause. Verify both.
 - If the reserved IP ever changes (don't let it), the Atlas allowlist and TLS both break.
-- ARM64: nothing special for a plain JAR (the JVM is arch-agnostic), but if you ever add
-  native bits, mind the architecture.
-- `-XX:MaxRAMPercentage=50` caps the heap at ~6 GB of the 12 GB box, leaving room for
-  Nginx, the Datadog Agent and the OS. (The JVM's own default is 25% of RAM, which is also
-  safe — the point is to set it deliberately rather than inherit it.)
+- The shape is x86_64 now, so architecture caveats mostly disappear — install the x64
+  Temurin build, and `dd-trace-java` has no arch question.
+- **Memory is the binding constraint on this box, not CPU.** Rough budget for 1 GB: OS
+  ~150–250 MB, Nginx ~15 MB, JVM RSS ~450–550 MB with `-Xmx256m` (heap plus metaspace,
+  code cache and thread stacks). That leaves very little slack, which is what the swap file
+  is for. If you see the OOM killer in `dmesg`, the JVM is the thing it will kill.
 
 ---
 
@@ -619,8 +634,9 @@ confirmed in Phase 0.
 > ~13-month metric retention instead of the free tier's 1 day — which is the difference
 > between an "applications created over time" widget that tells a story and one that shows
 > yesterday. Because host slots are free, **the Agent is installed permanently**, not
-> ripped out with the trial, and you get A1 host metrics (CPU/memory/disk) alongside the
-> app's own. **APM is the one thing Pro does not include** — it is a separate paid SKU, so
+> ripped out with the trial — **except that the host change to a 1 GB micro reverses
+> exactly that**: see the Agent section below. Host infra metrics for the app box are the
+> casualty; the app's own custom metrics are unaffected. **APM is the one thing Pro does not include** — it is a separate paid SKU, so
 > the trace-capture window below is unchanged and still one-shot.
 
 ### Custom metrics (permanent)
@@ -646,12 +662,16 @@ confirmed in Phase 0.
       *Plan & Usage → Custom Metrics* for the actual series count once traffic has run for
       a day.
 
-### Datadog Agent (permanent)
-- [ ] Install the Datadog Agent on the VPS (apt) with `DD_API_KEY` and `DD_SITE`. ~0.5 GB
-      RSS on a 12 GB box, and it stays — the student pack covers 10 hosts for 2 years.
-- [ ] Confirm the host appears under *Infrastructure* with CPU / memory / disk metrics.
-      These are free (not custom metrics) and make the dashboard substantially better than
-      four hand-written counters alone.
+### Datadog Agent — NOT on the app host
+
+The host change to a 1 GB micro reverses the earlier "Agent stays permanently" decision
+(`CLAUDE.md §6`): ~0.5 GB RSS does not fit beside a JVM in 1 GB. Custom metrics are
+unaffected — Micrometer pushes straight to the Datadog API and never needed an agent. What
+is lost is host infra metrics for the app box, which is a fair price for the app staying up.
+
+- [ ] Do **not** `apt install datadog-agent` on the app host.
+- [ ] If you want host metrics anyway, install the Agent on the **second free micro** and
+      accept that it reports that box's metrics, not the app box's.
 
 ### APM (trial window — one shot)
 - [ ] **Start the APM trial now**, not earlier: it is 14 days and you want real traffic in
@@ -659,11 +679,22 @@ confirmed in Phase 0.
       re-plan this section rather than burning the deploy on it.
 - [ ] Download `dd-java-agent.jar` to `/opt/jobtracker/`. Verify the version lists **JDK
       25** support before adding the flag.
-- [ ] Set `DD_APM_ENABLED=true` on the Agent.
+- [ ] **Create the second free micro** and install the Datadog Agent there with
+      `DD_API_KEY`, `DD_SITE` and `DD_APM_ENABLED=true`. Bind its trace intake to the
+      private subnet, not `0.0.0.0`.
+      *`dd-trace-java` needs an Agent to send traces to — but it does not have to be local.
+      Putting it on the second box keeps ~0.5 GB off the app host and costs nothing.*
 - [ ] Add to `jobtracker.service` `ExecStart`: `-javaagent:/opt/jobtracker/dd-java-agent.jar`,
-      and put `DD_SERVICE=jobtracker-api`, `DD_ENV=prod`, `DD_VERSION=<sha>` in
-      `/etc/jobtracker/jobtracker.env` (updated by CI) rather than in the unit file, so a
-      deploy doesn't have to rewrite the unit. Restart.
+      and put `DD_SERVICE=jobtracker-api`, `DD_ENV=prod`, `DD_VERSION=<sha>` and
+      **`DD_AGENT_HOST=<second micro's private IP>`** in `/etc/jobtracker/jobtracker.env`
+      (updated by CI) rather than in the unit file, so a deploy doesn't have to rewrite the
+      unit. Restart.
+- [ ] Watch memory closely while the javaagent is attached — it adds roughly 50–100 MB on
+      top of the heap. If the app starts swapping, drop `-Xmx` to 192m for the trial window.
+- [ ] **Fallback if 1 GB simply cannot carry the javaagent:** run the app plus a local Agent
+      on your laptop during the trial, capture the trace and service-map screenshots there,
+      and say plainly in the README that APM was evaluated locally while production runs
+      metrics-only. An honest smaller claim beats a vague larger one.
 - [ ] Generate traffic (use the app, run `jobtracker.http` against prod) and confirm
       traces + the service map in APM.
 
@@ -678,8 +709,8 @@ confirmed in Phase 0.
 
 ### Wind down (APM only)
 - [ ] After capturing everything (before the trial ends): remove the `-javaagent` flag and
-      `DD_APM_ENABLED`, redeploy. **Leave the Agent installed** — it's covered by the
-      student pack and keeps feeding host metrics.
+      `DD_AGENT_HOST`, redeploy, and **terminate the second micro** (or leave it idle — it
+      is free either way). The app host never had an Agent to remove.
 - [ ] Note in `CLAUDE.md §2` that APM is trial-only and currently off, and when the trial
       ended.
 
