@@ -1,0 +1,37 @@
+# Local development. Points at a throwaway MongoDB:
+#   docker run -d --name jt-mongo -p 27017:27017 mongo:8
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/jobtracker
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:}
+            client-secret: ${GOOGLE_CLIENT_SECRET:}
+            # Port 5173, not 8080: the browser sits on the Vite dev server, which proxies
+            # /login through to us. Pointing this at :8080 lands you on a bare API after
+            # login instead of the SPA. See PLAN.md Phase 3.
+            redirect-uri: http://localhost:5173/login/oauth2/code/google
+
+# Swagger is available locally only; application-prod.yml turns it off.
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
+app:
+  allowed-emails: ${APP_ALLOWED_EMAILS:}
+  mcp-token: ${APP_MCP_TOKEN:local-dev-token-change-me}
+  base-url: http://localhost:5173
+
+logging:
+  level:
+    # Shows the generated queries and aggregation pipelines — useful while learning
+    # MongoTemplate. Noisy; comment out when it stops being interesting.
+    org.springframework.data.mongodb.core.MongoTemplate: DEBUG

@@ -1,0 +1,29 @@
+# ---- OS ----
+.DS_Store
+
+# ---- IntelliJ ----
+# Run configurations are shared deliberately (PLAN.md Phase 0); everything else is local.
+.idea/*
+!.idea/runConfigurations/
+*.iml
+*.iws
+*.ipr
+
+# ---- Java / Maven ----
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---- Node (frontend, mcp-server) ----
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+
+# ---- Secrets ----
+# Prod config lives in /etc/jobtracker/jobtracker.env on the VPS; nothing secret is
+# committed. application-local.yml reads from env vars, so it is safe to commit as-is —
+# if you ever paste a real secret into it, add it here immediately.
+.env
+.env.*
+!.env.example

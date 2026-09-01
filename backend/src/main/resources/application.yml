@@ -1,0 +1,41 @@
+# Shared defaults. Anything environment-specific lives in application-local.yml or
+# application-prod.yml; anything secret lives in an env var, never here (CLAUDE.md §8).
+spring:
+  application:
+    name: jobtracker
+
+  jackson:
+    datatype:
+      datetime:
+        # Instants serialize as ISO-8601 strings ("2026-08-02T15:00:00Z"), not epoch millis.
+        # Jackson 3 moved this out of SerializationFeature into DateTimeFeature, so the
+        # Boot 3 key `spring.jackson.serialization.write-dates-as-timestamps` no longer
+        # binds — it fails the context load with "No enum constant". Jackson 3 already
+        # defaults to ISO-8601; this is set explicitly so the intent is on the record.
+        write-dates-as-timestamps: false
+
+management:
+  datadog:
+    metrics:
+      export:
+        # OFF by default, and ON only in application-prod.yml. The registry
+        # auto-configures purely on classpath presence and throws
+        # "management.datadog.metrics.export.apiKey was 'null' but it is required"
+        # during context creation — which fails every @SpringBootTest, including plain
+        # unit-ish ones, from the moment the dependency is added in Phase 1 until it is
+        # configured in Phase 5.
+        enabled: false
+
+  endpoints:
+    web:
+      exposure:
+        # Only health. Set from day one rather than as a Phase 7 polish step (CLAUDE.md §11).
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+# Owner's timezone. Every relative window ("due soon", "this week", "in the next N days")
+# is computed here and converted to UTC for the query — see SCHEMA.md §7.
+app:
+  timezone: America/New_York

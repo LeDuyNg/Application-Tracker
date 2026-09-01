@@ -1,0 +1,43 @@
+# Production. Every value comes from the systemd EnvironmentFile at
+# /etc/jobtracker/jobtracker.env (mode 600). No secrets in this file.
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI}
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            redirect-uri: ${APP_BASE_URL}/login/oauth2/code/google
+
+server:
+  # Nginx terminates TLS and proxies to 127.0.0.1:8080. Without this, Spring builds the
+  # OAuth redirect as http:// and Google rejects it.
+  forward-headers-strategy: framework
+
+# Off in prod: Swagger would publish the whole API surface on a public domain
+# (CLAUDE.md §6).
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  datadog:
+    metrics:
+      export:
+        # Overrides the `false` default in application.yml.
+        enabled: true
+        api-key: ${DD_API_KEY}
+        uri: https://api.${DD_SITE}
+        step: 30s
+
+app:
+  allowed-emails: ${APP_ALLOWED_EMAILS}
+  mcp-token: ${APP_MCP_TOKEN}
+  base-url: ${APP_BASE_URL}
