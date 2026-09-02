@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { useApplication, useDeleteApplication } from '../api/hooks/applications';
+import { SafeLink } from '../components/SafeLink';
 import { StageTimeline } from '../components/StageTimeline';
 import { StatusBadge } from '../components/StatusBadge';
 import { ErrorNote, Loading } from '../components/feedback';
@@ -58,11 +59,7 @@ export function ApplicationDetail() {
           {app.lastContactAt ? formatRelative(app.lastContactAt) : '—'}
         </Field>
         <Field label="Job posting">
-          {app.jobPostingUrl ? (
-            <a href={app.jobPostingUrl} target="_blank" rel="noreferrer">open ↗</a>
-          ) : (
-            '—'
-          )}
+          <SafeLink url={app.jobPostingUrl} />
         </Field>
       </div>
 

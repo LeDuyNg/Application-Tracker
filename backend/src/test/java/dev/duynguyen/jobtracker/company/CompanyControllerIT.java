@@ -139,6 +139,41 @@ class CompanyControllerIT extends AbstractMongoIT {
     }
 
     @Test
+    @DisplayName("a website with a non-http scheme is rejected, http(s) and blank are accepted")
+    void websiteSchemeIsRestricted() throws Exception {
+        // The SPA renders this value straight into an <a href>, and React does not sanitise
+        // href attributes — it escapes text content only. Without the scheme allowlist a
+        // stored "javascript:..." is a link that runs script in the app's own origin.
+        for (String hostile : new String[] {
+                "javascript:alert(document.cookie)",
+                "JaVaScRiPt:alert(1)",
+                "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+                "vbscript:msgbox(1)" }) {
+            mvc.perform(post("/api/companies").with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "name": "Hostile %s", "website": "%s" }"""
+                                    .formatted(hostile.hashCode(), hostile)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors[0].field").value("website"));
+        }
+
+        mvc.perform(post("/api/companies").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "name": "Fine", "website": "https://stripe.com/jobs" }"""))
+                .andExpect(status().isCreated());
+
+        // Blank is "not filled in", not "malformed" — the SPA sends null, but the .http
+        // collection and the MCP client need not.
+        mvc.perform(post("/api/companies").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "name": "Blank site", "website": "" }"""))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     @DisplayName("409 on a duplicate name, whatever the casing")
     void duplicateName() throws Exception {
         create("Stripe");

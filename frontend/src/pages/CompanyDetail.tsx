@@ -4,6 +4,7 @@ import { useApplications } from '../api/hooks/applications';
 import { useCompany, useDeleteCompany } from '../api/hooks/companies';
 import { ApplicationTable } from '../components/ApplicationTable';
 import { ErrorNote, Empty, Loading } from '../components/feedback';
+import { SafeLink } from '../components/SafeLink';
 
 /** One company: its fields, its contacts, and every application that references it. */
 export function CompanyDetail() {
@@ -45,7 +46,7 @@ export function CompanyDetail() {
         <div><div className="muted small">Location</div>{company.location ?? '—'}</div>
         <div>
           <div className="muted small">Website</div>
-          {company.website ? <a href={company.website} target="_blank" rel="noreferrer">open ↗</a> : '—'}
+          <SafeLink url={company.website} />
         </div>
       </div>
 

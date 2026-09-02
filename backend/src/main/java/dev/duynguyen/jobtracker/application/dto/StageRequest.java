@@ -37,6 +37,6 @@ public record StageRequest(
         Instant scheduledAt,
         Instant completedAt,
         StageFormat format,
-        List<@Size(max = 120) String> interviewers,
+        @Size(max = 20) List<@Size(max = 120) String> interviewers,
         @Size(max = 5000) String notes
 ) {}

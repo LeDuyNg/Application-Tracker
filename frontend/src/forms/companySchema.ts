@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import type { CompanyRequest } from '../api/types';
+import { safeUrl } from '../lib/url';
 
 /**
  * zod is a runtime schema validator. `companySchema.parse(x)` either returns a typed value
@@ -27,7 +28,15 @@ const contactSchema = z.object({
 
 export const companySchema = z.object({
   name: z.string().trim().min(1, 'Company name is required').max(120),
-  website: z.string().trim().max(500).optional(),
+  // Blank is fine (means "not filled in"); anything else must be a link the detail
+  // page will actually open. Mirrors the backend's Validation.HTTP_URL so a bad value
+  // is caught in the form rather than coming back as a 400.
+  website: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .refine((v) => !v || safeUrl(v) !== null, 'Must start with http:// or https://'),
   industry: z.string().trim().max(120).optional(),
   location: z.string().trim().max(200).optional(),
   contacts: z.array(contactSchema),
