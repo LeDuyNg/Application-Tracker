@@ -223,11 +223,27 @@ sudo chmod 600 /etc/jobtracker/jobtracker.env
 sudo chown jobtracker:jobtracker /etc/jobtracker/jobtracker.env
 ```
 
-Generate the MCP token and paste it in (Phase 6 needs the same value):
+Generate the MCP token **on the VPS**, straight into the file — the token never appears on
+screen, and the shell records the literal `$(openssl rand -hex 32)` rather than what it
+expanded to, so it stays out of history and scrollback:
 
 ```bash
-openssl rand -hex 32
+sudo -u jobtracker sed -i "s|^APP_MCP_TOKEN=.*|APP_MCP_TOKEN=$(openssl rand -hex 32)|" \
+  /etc/jobtracker/jobtracker.env
 ```
+
+Generating it on the laptop instead works identically — `openssl rand` reads the OS CSPRNG
+either way — but then it lives in a terminal buffer and probably a clipboard, and still has
+to reach the server. One copy of record, on the box, is simpler.
+
+Phase 6 needs the same value on the laptop for the MCP server. Read it back then:
+
+```bash
+sudo grep APP_MCP_TOKEN /etc/jobtracker/jobtracker.env
+```
+
+None of this is needed for Phase 4 — leaving it blank is a valid state, not a broken one
+(see the `APP_MCP_TOKEN` note below).
 
 Five things in that file worth understanding:
 
