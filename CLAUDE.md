@@ -57,7 +57,7 @@ survive a follow-up question.)*
 | | |
 |---|---|
 | **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (103 tests). A pre-deploy security pass has been applied (§6, 2026-09-02). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
-| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
+| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. Datadog is redeemed and on **Pro** with an API key generated. The APM-trial-availability check is **done, and the answer is no** (2026-09-02, §6) — no APM trial is offerable on student Pro, so Phase 5's APM subsection needs a decision. Phase 0 is otherwise complete. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
@@ -839,6 +839,39 @@ files nobody had ever executed.
   **and** `/assets/app.js` (which is the proof the inheritance handling works), and 30 rapid
   requests to `/api` produce 21 pass-throughs followed by 429s — `burst=20` behaving exactly
   as configured. Worth repeating on the VPS after certbot rewrites the TLS block.
+
+### 2026-09-02 — APM is not offerable on the student Pro plan
+
+The Phase 0 item flagged as "the one with no recovery path if discovered late" was checked,
+and the answer is no. Recorded here because `PLAN.md` Phase 0 requires it, and because the
+reasoning matters more than the fact.
+
+- **What was checked:** account is redeemed and shows **Pro** via the GitHub Student
+  Developer Pack, API key generated, DD site noted. Under *Plan & Usage*, **APM offers no
+  trial affordance.**
+- **Why, and why it was predictable.** APM is a separate paid SKU (~$31/host/mo) and is not
+  bundled into Pro on any plan — already recorded on 2026-09-01. The 14-day trial the
+  earlier entries assumed is the *new-account evaluation* trial; redeeming the student Pro
+  offer takes the account onto Pro and that evaluation window is no longer on offer. So the
+  two decisions were individually right and their combination was never checked, which is
+  exactly the thing this Phase 0 item existed to catch.
+- **Blast radius: nil for anything already claimed.** §1's deliverable 2 and the resume
+  bullet were narrowed on 2026-09-01 to say "metrics, dashboards and alerting" for
+  production and to name APM separately as a local exercise. Nothing anywhere promises
+  production APM. What is lost is only the *local* flame-graph screenshots and the
+  `dd-trace-java` instrumentation story.
+- **What production keeps, unchanged:** custom metrics pushed by Micrometer straight to the
+  Datadog API over HTTPS (never needed an Agent), the dashboard, and the error-rate monitor.
+  ~13-month retention on Pro, which is what made the "applications over time" widget worth
+  building. Phase 5 is otherwise unaffected.
+- **Open:** whether to drop tracing from the project entirely or exercise it locally through
+  OpenTelemetry instead. Not decided here — see the next entry when it is.
+
+**Interview note, worth keeping.** "Why is there no APM in production?" now has a better
+answer than a screenshot would have been: a 1 GB host, an Agent that needs ~0.5 GB beside a
+JVM already at ~500 MB, one instance in the tenancy, and a tracing SKU that is separately
+billed. That is a capacity-and-cost tradeoff explained from first principles, which is
+stronger material than a flame graph captured on a laptop.
 
 ---
 

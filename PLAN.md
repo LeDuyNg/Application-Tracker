@@ -111,20 +111,22 @@ path in `CLAUDE.md §5` becomes real.
 You have **Datadog Pro free for 2 years via the GitHub Student Developer Pack** (10 hosts,
 ~13-month metric retention). This materially changes Phase 5 — see `CLAUDE.md §6`.
 
-- [ ] Redeem the Datadog offer in the GitHub Student Developer Pack and join the Datadog
+- [x] Redeem the Datadog offer in the GitHub Student Developer Pack and join the Datadog
       Student Developer program. The 2-year clock starts at redemption; irrelevant at this
       project's timeline, and you want the account live well before Phase 5.
-- [ ] Confirm the account shows **Pro** (not Free) under *Plan & Usage*. Free would mean
+- [x] Confirm the account shows **Pro** (not Free) under *Plan & Usage*. Free would mean
       1-day metric retention, which would make the Phase 5 dashboard worthless.
-- [ ] Generate an **API key** (used by the Micrometer registry). Note your **DD site**
+- [x] Generate an **API key** (used by the Micrometer registry). Note your **DD site**
       (e.g. `datadoghq.com`).
-- [ ] **Check now whether an APM trial can be started on top of the student Pro plan**
+- [x] **Check now whether an APM trial can be started on top of the student Pro plan**
       (*Plan & Usage* → APM, look for a "start trial" affordance). APM is a separate paid
       SKU and is **not** included in Pro. If a trial is *not* offerable on this account,
       the APM screenshots in Phase 5 need rethinking — and that is much cheaper to
       discover now than in Phase 5. Record the answer in `CLAUDE.md §6`.
-- [ ] Do **not** start the APM trial yet — it is spent deliberately in Phase 5, once there
-      is real traffic to trace.
+      **Answer (2026-09-02): no. APM is not offerable on the student Pro plan.** Recorded
+      in `CLAUDE.md §6`.
+- [x] ~~Do **not** start the APM trial yet~~ — moot: there is no trial to start. Phase 5's
+      APM subsection needs rewriting or removing; see `CLAUDE.md §6`.
 
 **Done when:** you can `ssh` to the VPS; the M0 cluster shows "Active"; you have the Google
 client ID/secret, the Atlas URI, and the Datadog API key saved; Datadog shows the **Pro**

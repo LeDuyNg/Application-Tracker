@@ -91,12 +91,17 @@ pointing into merged history. Harmless; delete them whenever.
 4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
    authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 
-### Phase 0 — one item left
-**Datadog student-pack redemption**, and the **APM-trial-availability check** inside it. That
-check is the only task in the project with no recovery path if it is discovered late: APM is
-a separate paid SKU, the trial is 14 days and one-shot, and finding out in Phase 5 that no
-trial is offerable means the APM screenshots have to be re-planned with the clock already
-spent.
+### Phase 0 — complete, with one consequence to act on
+Datadog is redeemed, shows **Pro**, and an API key is generated. The
+**APM-trial-availability check is done and the answer is no** (2026-09-02) — APM is a
+separate paid SKU and no trial is offerable on top of student Pro. Found at the right time,
+which is the whole reason that item existed.
+
+Nothing already claimed is affected: §1 and the resume bullet were narrowed on 2026-09-01
+and never promised production APM. **Open decision:** drop tracing from the project, or
+exercise it locally via OpenTelemetry + a local collector instead of `dd-trace-java`.
+Phase 5's APM subsection and `CLAUDE.md §1` deliverable 2 both need editing once that is
+settled. See `CLAUDE.md §6`, entry "APM is not offerable on the student Pro plan".
 
 ### Gaps noticed, deliberately not built
 - ~~No logout endpoint / button.~~ **Done** — `POST /api/logout` → 204 on the browser
@@ -177,11 +182,11 @@ rather than trusting a snippet.
 
 Phase 0 is **paused, not finished**. None of it blocks Phase 1 except the Atlas item.
 
-- [ ] Domain registration
-- [ ] Oracle instance — **shape changed**: `VM.Standard.E2.1.Micro` (1/8 OCPU burstable,
+- [x] Domain registration
+- [x] Oracle instance — **shape changed**: `VM.Standard.E2.1.Micro` (1/8 OCPU burstable,
       1 GB RAM, x86), **one instance only**. A1 ARM was unobtainable. See `CLAUDE.md §6`.
-- [ ] MongoDB Atlas M0 cluster
-- [ ] Google Cloud OAuth client
+- [x] MongoDB Atlas M0 cluster
+- [x] Google Cloud OAuth client
 - [ ] Datadog student-pack redemption, and the **APM-trial-availability check** — the one
       Phase 0 item with no recovery path if discovered late
 
