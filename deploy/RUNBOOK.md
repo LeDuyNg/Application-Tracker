@@ -141,7 +141,7 @@ The **JRE**, not the JDK — nothing compiles on this box and the JDK is wasted 
 ### 4b. Everything else
 
 ```bash
-sudo apt install -y nginx certbot python3-certbot-nginx rclone fail2ban unattended-upgrades
+sudo apt install -y nginx certbot python3-certbot-nginx ssl-cert rclone fail2ban unattended-upgrades
 # mongodump/mongorestore. Not needed today — Step 12 is deferred — but it is a 30-second
 # install now versus a remembered errand later, and Step 12's interim manual dump wants it.
 wget -qO - https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg --dearmor -o /etc/apt/keyrings/mongodb.gpg
@@ -585,12 +585,25 @@ sudo ln -sfn /etc/nginx/sites-available/jobtracker /etc/nginx/sites-enabled/jobt
 sudo rm -f /etc/nginx/sites-enabled/default        # its server_name _ would shadow ours
 ```
 
-`nginx -t` **will fail right now** — the two `:443` blocks have no certificate yet. That is
-expected. Get one:
+Check it loads *before* running certbot — it should, with no certificate yet, because the
+`:443` blocks point at Ubuntu's snakeoil placeholder for exactly this moment:
+
+```bash
+sudo nginx -t
+```
+
+That matters more than it looks. `certbot --nginx` runs `nginx -t` itself and refuses to do
+anything if it fails — so a config that cannot load without a certificate can never obtain
+one through the nginx plugin. Chicken and egg. The placeholder is the egg; certbot rewrites
+both `ssl_certificate` lines to `/etc/letsencrypt/live/...` on first issue.
+
+If it complains the snakeoil files are missing: `sudo apt install ssl-cert`.
+
+Now get the real certificate:
 
 ```bash
 sudo certbot --nginx -d app4jobtrack.me -d www.app4jobtrack.me
-sudo nginx -t          # NOW it must pass
+sudo nginx -t          # still passes, now with real certs
 sudo systemctl reload nginx
 sudo systemctl list-timers | grep certbot     # auto-renew armed
 ```
