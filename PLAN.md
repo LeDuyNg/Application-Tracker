@@ -197,9 +197,14 @@ auth yet** (added in Phase 2).
       `MongoTemplate` in the service, not derived queries.
 
 ### DTOs + mappers (`*/dto/`)
-- [x] Request records: `CreateCompanyRequest`, `UpdateCompanyRequest`,
-      `CreateApplicationRequest`, `UpdateApplicationRequest`, `AddStageRequest`,
-      `UpdateStageRequest`. Bean Validation annotations per `SCHEMA.md §8.1`.
+- [x] Request records: `CreateCompanyRequest`, `UpdateCompanyRequest`, `ContactRequest`,
+      `CreateApplicationRequest`, `UpdateApplicationRequest`, `CompensationRequest`, and a
+      single **`StageRequest`** serving both add and update. Bean Validation annotations per
+      `SCHEMA.md §8.1`.
+      *(This list originally named separate `AddStageRequest` and `UpdateStageRequest`. They
+      would have been field-for-field identical: `PATCH` on a stage is a full replacement of
+      its fields, not a partial merge, because a record cannot distinguish "absent" from
+      "explicitly null" without wrapper types. One record, documented as such.)*
 - [~] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
       `ApplicationSummaryResponse` (compact, for lists/search), `StatsResponse`,
       `UpcomingInterviewResponse`, `FollowupResponse`.  
@@ -209,15 +214,15 @@ auth yet** (added in Phase 2).
 - [x] Hand-written `CompanyMapper`, `ApplicationMapper` (no MapStruct).
 
 ### Services
-- [ ] `CompanyService`: CRUD. `delete` **blocks with 409** when applications reference the
+- [x] `CompanyService`: CRUD. `delete` **blocks with 409** when applications reference the
       company (decided — `CLAUDE.md §6`); the error message names the referencing
       applications so the 409 is actionable. Rename updates `companyName` on every one of
       that company's applications.
-- [ ] `ApplicationService`: CRUD; on create, seed `stages[0]` as `APPLICATION_SUBMITTED`
+- [x] `ApplicationService`: CRUD; on create, seed `stages[0]` as `APPLICATION_SUBMITTED`
       / `PASSED` with `completedAt = appliedDate` at midnight **in `app.timezone`**, not
       UTC, unless the caller supplied stages; validate `companyId` exists; set
       `companyName` from the company; keep `sequence` contiguous.
-- [ ] Denormalization sync per `SCHEMA.md §1`, on every stage mutation — three rules that
+- [x] Denormalization sync per `SCHEMA.md §1`, on every stage mutation — three rules that
       are each easy to get subtly wrong, so give each one a unit test:
   - `currentStageType` = the **lowest**-`sequence` stage that is `SCHEDULED`/`EXPECTED`,
     else the **highest**-`sequence` `PASSED` stage. (Not "the latest pending stage" — that
