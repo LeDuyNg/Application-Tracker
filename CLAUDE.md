@@ -56,13 +56,13 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 2 — authentication: code complete.** Two filter chains (bearer/MCP + session/OAuth2), email allowlist with `email_verified`, RFC 7807 401/403, `GET /api/me`. 100 tests green. The one thing unverified is a real Google login, which needs the Phase 3 SPA on `:5173`. |
-| **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
+| **Current phase** | **Phase 3 — React SPA. Not started.** Phases 1 and 2 are merged to `main` (`75473df`), 100 tests green. Still owed from Phase 2: a real Google login round trip, which needs the Vite dev server on `:5173`. |
+| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `phase-1-backend-crud` is pushed; `main` is still docs-only. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1 and 2, merged `--no-ff` so each phase boundary is a commit. Work continues on `phase-3-frontend`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |

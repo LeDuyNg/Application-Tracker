@@ -26,51 +26,65 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 2 (authentication) — **code complete**. One acceptance criterion
-cannot be checked until Phase 3 exists; see below.
-**Branch:** `phase-2-auth`, cut from `phase-1-backend-crud`. Neither is merged to `main`,
-which is still docs-only.
+**Current phase:** Phase 3 — React SPA. **Not started**; the branch exists and is empty.
+**Branch:** `phase-3-frontend`, cut from `main`.
+**`main` is at `75473df`** and contains Phases 1 and 2, merged with `--no-ff` so each phase
+boundary is a commit. `mvn verify` was run on the merge result before pushing — 100 tests
+green — so "main is deployable" is checked rather than assumed.
 
-### Done and tested
-- **Phase 1, complete** — domain, repositories, DTOs, mappers, `CompanyService`,
+The `phase-1-backend-crud` and `phase-2-auth` branches still exist locally and on the remote,
+pointing into merged history. Harmless; delete them whenever.
+
+### Done
+- **Phase 1 — backend CRUD.** Domain, repositories, DTOs, mappers, `CompanyService`,
   `ApplicationService` (three denormalization rules), `StatsService`,
-  `ApplicationQueryService` (follow-ups / interviews / search), 16 endpoints,
-  `GlobalExceptionHandler`, and the `.http` collection. Verified against the real Atlas M0.
-- **Phase 2** — two `SecurityFilterChain` beans:
-  - *bearer chain* (`@Order(1)`, matches an `Authorization: Bearer` header): stateless, CSRF
-    off, `GET /api/**` requires `ROLE_MCP`, everything else `denyAll()`. Token compared as
-    SHA-256 digests in constant time.
-  - *browser chain* (`@Order(2)`): Google OIDC login, `AllowlistOidcUserService` checking the
-    allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out, RFC 7807
-    401/403 instead of redirects, `GET /api/me`.
+  `ApplicationQueryService` (follow-ups / upcoming interviews / escaped-regex search),
+  16 endpoints, `GlobalExceptionHandler` (RFC 7807), and the `.http` collection. Verified
+  against the real Atlas M0, not only Testcontainers.
+- **Phase 2 — authentication.** Two `SecurityFilterChain` beans:
+  - *bearer chain* (`@Order(1)`, matches an `Authorization: Bearer` header) — stateless,
+    CSRF off, `GET /api/**` requires `ROLE_MCP`, everything else `denyAll()`. Token compared
+    as SHA-256 digests.
+  - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
+    allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
+    401/403 as `problem+json` instead of redirects, `GET /api/me`.
 - **100 tests green** (`./mvnw verify`): 26 unit, 74 integration across seven `*IT` classes.
 
-### Verified against the running app, not just in tests
-Unauthenticated `/api` → 401 `problem+json` with **no** `Location` header; the `XSRF-TOKEN`
-cookie present on that same rejected response; bearer token reads (200) and cannot write
-(403 on POST and DELETE); wrong and empty tokens → 401; `/actuator/health` open; Swagger
-reachable on `local`; `/oauth2/authorization/google` → Google with
-`redirect_uri=http://localhost:5173/login/oauth2/code/google`, scope `openid profile email`.
+### The one thing still unverified
+**A real Google login round trip.** The `local` redirect URI points at
+`http://localhost:5173` — the Vite dev server — which does not exist until Phase 3. So
+signing in cannot currently complete, and the `.http` collection's **write** requests, which
+need a real `JSESSIONID`, cannot run. Every `GET` works today via the MCP bearer token.
 
-### The one thing not verified
-**A real Google login round trip.** The `local` redirect URI points at `http://localhost:5173`
-— the Vite dev server, which does not exist until Phase 3 — so signing in cannot currently
-complete. The allowlist logic is unit-tested in isolation (allowed / other address /
-unverified / missing claim / empty list). To try it before Phase 3, register
-`http://localhost:8080/login/oauth2/code/google` in the Google client and override
-`redirect-uri` to match in `backend/config/application-local.yml`.
+**Phase 3 fixes this as a side effect**: once `npm run dev` is serving `:5173` with the
+`/login` and `/oauth2` proxy entries in `vite.config.ts`, the redirect lands somewhere real.
+Treat "log in with Google and see `/api/me` return the profile" as the first thing to check
+once the dev server runs, not as a Phase 3 finishing touch — it is a Phase 2 acceptance
+criterion still owed.
 
-This also means the `.http` collection's **write** requests cannot run yet: they need a real
-`JSESSIONID`. Every `GET` works now, using the MCP bearer token.
+### What Phase 3 is
+`PLAN.md` Phase 3 has the full checklist. The shape: Vite + React + TS on `:5173` proxying
+`/api`, `/oauth2` and `/login` to `:8080`; TanStack Query for every server call; react-hook-form
++ zod for the two forms; plain CSS. `CLAUDE.md §12` asks for a slower pace here and an
+explanation of each new concept the first time it appears — React, TS and the whole frontend
+toolchain are new ground for the owner.
 
-**Suggested next step: Phase 3 — the React SPA.** It unblocks the login round trip as a side
-effect. Phase 0's remaining item is the **Datadog** student-pack redemption, and the
-APM-trial-availability check inside it is the one task with no recovery path if discovered
-late.
+The one trap already written down: **the Vite proxy is only two-thirds of what makes OAuth
+work locally.** Cookies ignore ports, so a session set by `:8080` is sent from `:5173` — but
+if the registered redirect URI points at `:8080`, Google sends the *browser* there after
+login and you land on a bare API instead of the SPA. All three parts are in `PLAN.md`
+Phase 3's gotchas.
+
+### Phase 0 — one item left
+**Datadog student-pack redemption**, and the **APM-trial-availability check** inside it. That
+check is the only task in the project with no recovery path if it is discovered late: APM is
+a separate paid SKU, the trial is 14 days and one-shot, and finding out in Phase 5 that no
+trial is offerable means the APM screenshots have to be re-planned with the clock already
+spent.
 
 ### Gaps noticed, deliberately not built
-- **No logout endpoint.** `PLAN.md` Phase 2 does not list one and Phase 3 does not either,
-  but a login system without one is odd — worth adding when the SPA needs it.
+- **No logout endpoint.** Neither Phase 2 nor Phase 3 lists one in `PLAN.md`, but a login
+  system without one is odd. Worth adding when the SPA needs it — likely early in Phase 3.
 
 ---
 

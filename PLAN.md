@@ -461,7 +461,7 @@ interviews. Runs on `localhost:5173`, proxying to `localhost:8080`.
       session cookie works).
 - [ ] `tsconfig.json`: `"strict": true`.
 - [ ] Set up `QueryClientProvider` and `BrowserRouter` in `main.tsx`.
-- [ ] Branch `phase-3-frontend`.
+- [x] Branch `phase-3-frontend`. Cut from `main` at `75473df`, which carries Phases 1 and 2.
 
 ### API layer (`src/api/`)
 - [ ] `types.ts` — TypeScript interfaces mirroring the backend response DTOs
