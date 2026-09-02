@@ -5,7 +5,7 @@ Two collections: **`companies`** and **`applications`**.
 `stages[]` is embedded inside each application document.
 
 This file is the authoritative data model. If code and this file disagree, one of them is a
-bug — fix the mismatch, don't let it stand.
+bug — fix the mismatch, don't let it stand. (`STATE.md` says how much of it is built.)
 
 ---
 
@@ -28,9 +28,9 @@ one round trip renders the whole pipeline."*
 | Denormalized field | Lives on | Source of truth | Sync rule |
 |---|---|---|---|
 | `companyName` | `applications` | `companies.name` | Updated for all of a company's applications whenever the company is renamed (service-layer logic). |
-| `applications.status` | `applications` | the history in `stages[]` + explicit user action | Set by the service when a terminal stage is added (a `FAILED` stage → `REJECTED`, an accepted `OFFER` → `ACCEPTED`) or by an explicit status change. **Terminal statuses are sticky** — see below. |
+| `applications.status` | `applications` | the history in `stages[]` + explicit user action | Derived: any `FAILED` stage → `REJECTED`; else an `OFFER`-type stage that `PASSED` → `OFFER`; else `ACTIVE`. **`ACCEPTED`, `WITHDRAWN` and `GHOSTED` are never derived** — each is a decision you make that leaves no trace in the stage data, so each is set explicitly. **Terminal statuses are sticky** — see below. |
 | `applications.currentStageType` | `applications` | `stages[]` | Recomputed on every stage add/update: the `type` of the stage with the **lowest `sequence`** whose status is `SCHEDULED` or `EXPECTED`; if none, the `type` of the stage with the **highest `sequence`** that is `PASSED`. |
-| `applications.lastContactAt` | `applications` | `stages[]` | Set to "now" by the service **only** when a stage is added, or an existing stage's `status`, `scheduledAt` or `completedAt` changes. Never touched by edits to notes, tags, comp, or any other field. |
+| `applications.lastContactAt` | `applications` | `stages[]` | Set to "now" by the service **only** when a stage is added, or an existing stage's `status`, `scheduledAt` or `completedAt` changes. Never touched by edits to notes, tags, comp, or any other field. **Always seeded on create** — from the furthest-forward date on the supplied stages, falling back to `appliedDate` at local midnight — so it is never null. See below. |
 
 **Sticky terminal statuses.** `status` is both derived *and* directly settable, which means
 a naive "recompute on every stage mutation" would undo explicit user choices — mark an
@@ -43,6 +43,17 @@ explicit status update. `GHOSTED` in particular is **manual-only** — no rule d
 (`@LastModifiedDate`) bumps on *any* write, so correcting a typo resets it. "Which
 companies haven't I heard back from in 2+ weeks?" is one of the four headline queries this
 whole project exists to answer, so it needs a field that tracks *contact*, not *editing*.
+
+**Why it is seeded on create rather than left null until the first stage change.** The
+gone-quiet query matches `lastContactAt: { $lte: <now − 14 days> }`, and `null` is not
+`$lte` anything — so an application that never gets one is not merely missing a timestamp,
+it is permanently invisible to the query. The service seeds it from the submission stage it
+generates, but an application created *with* its `stages[]` supplied skips that path
+entirely. That is exactly what the Phase 4 backfill of the in-progress job search does, so
+without an explicit seed the entire historical dataset would be silently absent from the one
+query it matters most for. Seeded from the furthest-forward `completedAt`/`scheduledAt` on
+the supplied stages; a future `scheduledAt` counting is intended, since a booked interview is
+not a process that has gone quiet.
 
 All denormalization sync happens in the **service layer**, never in controllers, never in
 the MCP server (which is read-only anyway).
@@ -345,7 +356,7 @@ they're defined for correctness of practice and as an interview talking point.
 
 | Field | Type | Rationale |
 |---|---|---|
-| `appliedDate`, `followUpDate` | `LocalDate` (BSON date at UTC midnight) | Date-only semantics; avoids off-by-one bugs in "this month" math. |
+| `appliedDate`, `followUpDate` | `LocalDate` (BSON date at UTC midnight) | Date-only semantics; avoids off-by-one bugs in "this month" math. **Enforced by explicit converters in `config/MongoConfig`** — Spring Data's default converts `LocalDate` using the *JVM's* default timezone, so the stored instant would otherwise depend on where the process runs (`00:00Z` on the UTC VPS, `07:00Z` on a laptop in Los Angeles) and date arithmetic would give different answers in dev and prod from identical data. |
 | `stages[].scheduledAt`, `stages[].completedAt` | `Instant` (UTC) | True points in time. |
 | `createdAt`, `updatedAt` | `Instant` (UTC) | Auditing. |
 
@@ -374,9 +385,22 @@ Jakarta Bean Validation on request DTOs:
 
 - `company`: `name` `@NotBlank @Size(max=120)`; `email` on contacts `@Email`.
 - `application`: `companyId` `@NotBlank`; `role` `@NotBlank @Size(max=160)`;
-  `appliedDate` `@NotNull @PastOrPresent`; `source` `@NotNull`; `status` `@NotNull`;
-  `stages` `@NotEmpty @Valid`.
-- `stage`: `type` `@NotNull`; `status` `@NotNull`; `sequence` `@Positive`.
+  `appliedDate` `@NotNull @PastOrPresent`; `source` `@NotNull`.
+  - On **create**, `status` and `stages` are **optional**, and this is deliberate. Requiring
+    `status` would make the documented `ACTIVE` default (§3) unreachable, and requiring a
+    non-empty `stages` would make the service's "seed an `APPLICATION_SUBMITTED` stage on
+    create" behaviour dead code — and would force the Phase 4 backfill to hand-build a
+    submission stage for every historical application. The **entity** still always has at
+    least one stage; the *service* guarantees that, not the caller.
+  - On **update** (`PUT`), `status` is `@NotNull` — a full replacement sends it — and
+    `stages` is **absent from the DTO entirely**. Rounds are managed only through the stage
+    sub-resource, so exactly one code path mutates them and maintains `currentStageType`,
+    `lastContactAt` and the derived `status`. A `PUT` that replaced the array wholesale
+    would be a second path repeating all three rules, and would discard the `stageId`s the
+    SPA and MCP server hold references to.
+- `stage`: `type` `@NotNull`; `status` `@NotNull`; `sequence` `@Positive` **and optional**
+  — omitted means "append at the end", which is the normal case; supply it only to insert a
+  round out of order.
   **`scheduledAt` is deliberately *not* `@Future`.** Backfilling the job search already in
   progress (Phase 4) means entering applications already sent and interviews already held;
   a future-only constraint would reject exactly that data. The only rule is `scheduledAt`
@@ -454,6 +478,28 @@ This uses **`lastContactAt`, never `updatedAt`** — see §1. `updatedAt` bumps 
 typo, which would silently hide an application that has genuinely gone quiet. This query is
 what answers "which companies haven't I heard back from in 2+ weeks?".
 
+**Response shape:** `FollowupResponse` returns the two halves as two named lists, `due` and
+`goneQuiet`, alongside the thresholds used (`dueWithinDays`, `quietAfterDays`) so a caller
+can state them rather than hardcoding 7 and 14 in its own text. Each entry carries the
+elapsed count the caller would otherwise recompute: `daysOverdue` on a due item (**negative
+means not yet due** — the list looks a week ahead) and `daysSinceContact` on a quiet one.
+
+**The two lists are not deduplicated against each other.** An application can appear in
+both, and when it does that is the most urgent row in the response, not a bug: you set
+yourself a reminder to chase a pipeline that has also gone silent.
+
+**`null` does the filtering in both halves.** A `null` `followUpDate` is not `$lte`
+anything, so applications with no reminder set fall out of the due query without needing an
+`$exists` clause — which is also why the index on `followUpDate` is sparse (§6). The same
+holds for `lastContactAt` in the gone-quiet query, and it is the reason the service seeds
+`lastContactAt` on *every* create, including one that supplies its own `stages[]`: an
+application with a null value there can never match, so it would be permanently invisible to
+this query. See §1.
+
+The gone-quiet half matches `status: "ACTIVE"` exactly, **not** merely non-terminal. An
+`OFFER` you are sitting on is silence of your own making, not a company that stopped
+replying.
+
 ### 10.3 `GET /api/applications?q=<text>&status=&companyId=&from=&to=&page=&size=&sort=` → `search_applications`
 
 - `q` → a **case-insensitive regex** across `companyName`, `role` and `notes`:
@@ -470,15 +516,39 @@ what answers "which companies haven't I heard back from in 2+ weeks?".
 
 `MongoTemplate` aggregation:
 ```
-$match  { "stages.scheduledAt": { $gte: now, $lte: now + days } }
+$match  { "stages.scheduledAt": { $gte: now, $lte: now + days },
+          status: { $nin: ["ACCEPTED","REJECTED","WITHDRAWN","GHOSTED"] } }
 $unwind "$stages"
 $match  { "stages.scheduledAt": { $gte: now, $lte: now + days },
           "stages.status": "SCHEDULED" }
 $sort   { "stages.scheduledAt": 1 }
-$project { companyName: 1, role: 1,
-           stageType: "$stages.type", when: "$stages.scheduledAt",
+$project { applicationId: "$_id", _id: 0, companyId: 1, companyName: 1, role: 1,
+           stageId: "$stages.stageId", stageType: "$stages.type",
+           scheduledAt: "$stages.scheduledAt",
            format: "$stages.format", interviewers: "$stages.interviewers" }
 ```
+
+**Why the same range is matched twice.** Before the `$unwind`, `stages.scheduledAt` is an
+*array*, and Mongo satisfies a range on an array when *some* element clears the lower bound
+and *some* element clears the upper — not necessarily the same element. An application with
+a round last January and another in June 2027 therefore passes the first `$match` while
+having nothing at all in the next seven days. That first stage is only a cheap index-backed
+prefilter to avoid unwinding the whole collection; the `$match` after the `$unwind` is the
+one that is actually correct, because by then each stage stands alone. Deleting either one
+leaves a pipeline that looks right and is not. `UpcomingInterviewsIT` pins this.
+
+**Terminal applications are excluded** (the `$nin` above, added when this was built —
+`CLAUDE.md §6`). A round left sitting at `SCHEDULED` on an application you withdrew from is
+stale data, not an appointment, and putting it on a calendar view is worse than omitting it.
+
+**`days` is capped at 365.** The endpoint is "what is coming up", and an uncapped window is
+an invitation to scan the entire future for no benefit.
+
+**The result is stage-shaped, not application-shaped.** One row per scheduled round, sorted
+by time *across* applications — an application with two rounds booked this week appears
+twice. That is the shape a calendar view and the MCP tool both want; returning applications
+with nested stages would make every caller flatten and re-sort to get it. `applicationId`
+and `stageId` are projected so the SPA can link straight to the round.
 
 ---
 

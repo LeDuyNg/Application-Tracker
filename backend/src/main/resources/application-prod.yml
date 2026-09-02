@@ -1,9 +1,11 @@
 # Production. Every value comes from the systemd EnvironmentFile at
 # /etc/jobtracker/jobtracker.env (mode 600). No secrets in this file.
 spring:
-  data:
-    mongodb:
-      uri: ${MONGODB_URI}
+  # See application-local.yml: `spring.mongodb.*`, not `spring.data.mongodb.*`. Getting this
+  # wrong in prod points the app at a `test` database on Atlas rather than `jobtracker`,
+  # silently and with no error.
+  mongodb:
+    uri: ${MONGODB_URI}
 
   security:
     oauth2:

@@ -1,8 +1,10 @@
 # CLAUDE.md — Job Application Tracker
 
-> **Read this first in every new session.** This file is the source of truth for the
-> project: what it is, the stack, the architecture, every decision made and why, the
-> conventions to follow, and where the detail lives (`PLAN.md`, `SCHEMA.md`).
+> **Read `STATE.md` first, then this file.** `STATE.md` says where the work actually
+> stands, what is running on the machine, and what to do next; it changes every session.
+> This file is the source of truth for the project: what it is, the stack, the
+> architecture, every decision made and why, the conventions to follow, and where the
+> detail lives (`STATE.md`, `PLAN.md`, `SCHEMA.md`).
 >
 > Keep this file current. When a decision changes, update **§6 Decision log** with a new
 > dated entry — do not silently rewrite history.
@@ -18,8 +20,11 @@ layer.
 Four deliverables, all built around one data store:
 
 1. **CRUD app** — Spring Boot REST API + React dashboard over MongoDB.
-2. **Datadog integration** — APM traces + custom metrics + a dashboard + one alert, against
-   the *deployed* instance.
+2. **Datadog integration** — custom metrics + a dashboard + one alert, against the
+   *deployed* instance, plus APM traces captured from a **local** run during the 14-day
+   trial. The 1 GB host cannot carry the Datadog Agent alongside the JVM, and only one
+   instance is available — see §6. Say which is which; a smaller true claim beats a vague
+   larger one.
 3. **MCP server** — a thin, read-only layer letting Claude Desktop answer natural-language
    questions about the job search ("how many applications this month?", "what interviews
    do I have this week?").
@@ -37,8 +42,13 @@ Four deliverables, all built around one data store:
 ### Resume bullet (draft — keep in sync with reality)
 
 > Built and deployed a full-stack job application tracker (Java 25, Spring Boot 4, React,
-> MongoDB Atlas) with Datadog APM/alerting and an MCP server enabling natural-language
-> queries over application status and interview stages via Claude Desktop.
+> MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
+> natural-language queries over application status and interview stages via Claude Desktop.
+
+*(Says "metrics, dashboards and alerting", not "APM": those are what run continuously
+against the deployed instance. APM tracing is exercised locally during the trial and is
+worth discussing in an interview — but claiming it as a production capability would not
+survive a follow-up question.)*
 
 ---
 
@@ -46,12 +56,13 @@ Four deliverables, all built around one data store:
 
 | | |
 |---|---|
-| **Current phase** | **Phase 1 — backend CRUD.** Project setup done (scaffold builds, `mvn verify` green); domain layer is the next task. |
+| **Current phase** | **Phase 1 — backend CRUD: complete.** 16 endpoints, RFC 7807 errors, 84 tests green, driven end to end by hand and verified against the real Atlas M0. **Phase 2 (auth) is next and is unblocked** — the Google client exists. |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
+| **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
-| **Live URL** | _not deployed yet_ (`https://<your-domain>` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — local commits not yet pushed. |
+| **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `phase-1-backend-crud` is pushed; `main` is still docs-only. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
@@ -72,7 +83,7 @@ Update this table at the end of every working session.
 | Security | **Spring Security** + `spring-boot-starter-oauth2-client` | Google OAuth2 login for the SPA; a static bearer token for the MCP server. |
 | API docs | **springdoc-openapi 3.x** | Swagger UI at `/swagger-ui.html` — useful for manual testing while learning. **Pin the 3.x line**: springdoc 2.x targets Boot 3 / Framework 6 and will not work on Boot 4. **Disabled in prod** (`springdoc.api-docs.enabled=false`) — see §6. |
 | Metrics | **Micrometer** + `micrometer-registry-datadog` | Pushes custom metrics straight to the Datadog API over HTTPS — independent of whether the Agent is installed. Budget: ~100 custom timeseries (see §6). |
-| APM | **`dd-trace-java`** javaagent | Added to the systemd unit **only during the 14-day APM trial**, then removed. APM is a separate paid SKU and is *not* part of the student-pack Pro plan (see §6). |
+| APM | **`dd-trace-java`** javaagent, **local only** | Never runs on the VPS: tracing needs a Datadog Agent to send to, and the Agent plus a JVM does not fit in 1 GB. Exercised on the laptop during the 14-day trial for screenshots and interview material. APM is also a separate paid SKU, not part of student-pack Pro (see §6). |
 | Tests | JUnit 5, **Testcontainers** (real MongoDB), Spring Boot Test | `*Test` = unit (Surefire), `*IT` = integration (Failsafe). Use the `mongo:8` image to match the Atlas major version. |
 
 ### Frontend
@@ -103,8 +114,8 @@ Update this table at the end of every working session.
 ### Deployment / infra
 | Thing | Choice | Notes |
 |---|---|---|
-| Host | **Oracle Cloud "Always Free" — Ampere A1 (ARM64)** | Effective always-on budget ≈ **2 OCPU / 12 GB RAM**, one VM (1,500 OCPU-hrs + 9,000 GB-hrs per month). |
-| OS | **Ubuntu 24.04 (arm64)** | Default login user `ubuntu`. |
+| Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** One instance. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
+| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for `dd-trace-java` and any native dependency. |
 | Runtime deploy | **Fat JAR + `systemd`** — **no Docker on the VPS** | Mongo is managed (Atlas), so the box only runs the API + Nginx; Docker's parity/autodiscovery wins don't apply and it costs memory. |
 | Reverse proxy / TLS | **Nginx + certbot (Let's Encrypt)** | Same pattern the owner used on a prior project. Serves the SPA static build and proxies `/api`, `/oauth2`, `/login` to `127.0.0.1:8080`. |
 | CI/CD | **GitHub Actions** | `mvn verify` → `mvn package` → `scp` JAR to the VPS → `ssh systemctl restart`. Frontend: `npm run build` → `rsync dist/` → `/var/www/jobtracker`. |
@@ -116,7 +127,7 @@ Update this table at the end of every working session.
 
 ```
                          ┌──────────────────────────────────────────┐
-                         │        Oracle Cloud A1 VPS (Ubuntu)       │
+                         │   Oracle E2.1.Micro VPS (Ubuntu, 1 GB)    │
                          │                                          │
   Browser ───HTTPS──────▶│  Nginx  ──/──────▶  React static build   │
    (you)                 │   :443   ──/api────▶ ┐                   │
@@ -135,7 +146,8 @@ Update this table at the end of every working session.
   Claude Desktop ──stdio──▶  MCP server (local, TS)  ───┘  (calls the deployed /api)
 
   Spring Boot API ──HTTPS──▶ Datadog API   (custom metrics via Micrometer, always)
-  Datadog Agent (VPS, TRIAL ONLY) ─────────▶ Datadog   (APM traces, ~2 weeks then removed)
+  Local dev run + Datadog Agent (laptop) ──▶ Datadog   (APM traces, trial window only —
+                                                        never on the 1 GB VPS)
 ```
 
 ### Request flows
@@ -148,8 +160,10 @@ Update this table at the end of every working session.
   calls the deployed `/api/...` endpoint with `Authorization: Bearer <MCP_TOKEN>` → a
   token filter authorizes it (read-only) → same controller/service path → JSON back to
   Claude.
-- **Metrics:** the API pushes custom metrics to Datadog continuously via the Micrometer
-  Datadog registry. APM traces only exist while the agent + javaagent are enabled (trial).
+- **Metrics:** the deployed API pushes custom metrics to Datadog continuously via the
+  Micrometer Datadog registry — over HTTPS, no agent involved. **There is no Datadog Agent
+  in production**, so there are no production traces; APM is exercised on a local run during
+  the trial only (§6).
 
 ---
 
@@ -157,6 +171,7 @@ Update this table at the end of every working session.
 
 ```
 Application-Tracker/
+├── STATE.md                   ← session handoff: where the work stands, read this first
 ├── CLAUDE.md                  ← this file (source of truth)
 ├── PLAN.md                    ← phased build plan + checklists
 ├── SCHEMA.md                  ← full data model
@@ -283,7 +298,9 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   pack gives Pro for 10 hosts free for 2 years, with ~13-month metric retention instead of
   the free tier's 1 day — which is what makes an "applications created over time" widget
   worth screenshotting at all. With host slots free, the Agent runs permanently and we get
-  A1 host infra metrics (CPU/memory/disk) alongside the app's custom metrics for nothing.
+  host infra metrics (CPU/memory/disk) alongside the app's custom metrics for nothing.
+  *(**Superseded** by the host-change entry below — the Agent does not fit on a 1 GB box.
+  The APM-is-a-separate-SKU half still stands.)*
   **APM is unchanged and still trial-only**: it is a separate paid SKU (~$31/host/mo) and
   is *not* part of Pro, student pack or otherwise. Micrometer's registry pushes over the
   API and does not depend on the Agent, so it stays as-is either way.
@@ -335,6 +352,67 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 - **`CorsConfig` deleted from the planned layout.** Prod is same-origin behind Nginx and
   dev goes through the Vite proxy, so CORS is never exercised. It was dead code.
 
+### 2026-09-01 — Host changed to the AMD micro shape
+
+- **`VM.Standard.E2.1.Micro` (1/8 OCPU burstable to 1, 1 GB RAM, x86) instead of Ampere A1
+  (2 OCPU / 12 GB).** Not a preference — A1 capacity was unobtainable in the home region,
+  and Always Free resources exist only in the home region, so waiting or switching region
+  were the alternatives. Two E2 micros are always free and are reliably available.
+  Accepted trade-offs: a tuned JVM, mandatory swap, and no room for the Datadog Agent on
+  the app host. Rejected: paying ~€4/mo for a Hetzner box (keeps the project genuinely
+  free), and retrying A1 indefinitely (the job search has its own clock).
+- **JVM sizing changes with it.** `-XX:MaxRAMPercentage=50` would hand a 1 GB box a 512 MB
+  heap, which leaves nothing for metaspace, thread stacks, code cache, Nginx and the OS.
+  Explicit `-Xmx256m` plus a capped metaspace instead. The collector is **SerialGC**, which
+  the JVM already selects on a 1-core sub-2 GB machine — G1 is the wrong choice at this
+  size, so the earlier "G1, not ZGC" entry now reads "SerialGC, and let ergonomics pick it".
+- **4 GB swap, with `vm.swappiness=10`.** Cheap on a 50 GB volume and it comfortably
+  covers `apt` operations and spikes. But be clear about what it buys: swap is a **safety
+  margin, not capacity**. It does not make a 1 GB box behave like a 5 GB one; it makes it
+  survive a spike slowly instead of dying. The boot volume is network-attached, so paged-out
+  memory costs milliseconds per access, and a GC that has to page a swapped heap back in can
+  freeze the app for seconds. Size `-Xmx` so the steady state is entirely RAM-resident and
+  swap is only ever touched under a spike.
+- **Cap the service with systemd rather than relying on swap absorbing a runaway.** Set
+  `MemoryHigh` / `MemoryMax` on `jobtracker.service`. With 4 GB of swap and no cap, a leak
+  thrashes for a long time and takes the whole box — including SSH — down with it. With a
+  cap, the JVM alone is killed and `Restart=on-failure` brings it back. A fast restart is a
+  better failure mode than an unreachable host.
+- **The Datadog Agent no longer runs on the app host.** This reverses the "Agent stays
+  permanently" part of the student-pack entry above: ~0.5 GB RSS does not fit beside a JVM
+  in 1 GB. Custom metrics are unaffected — Micrometer pushes to the Datadog API over HTTPS
+  and never needed an agent. What is lost is host infra metrics for the app box.
+- **APM, if it happens, uses the second free micro.** *(**Superseded same day** — only one
+  instance is actually available to this tenancy. See the entry below.)*
+
+### 2026-09-01 — Only one instance; APM moves off the deployed host
+
+Written after discovering the tenancy has one usable instance, not the two the Always Free
+description implies. This supersedes the "APM uses the second free micro" bullet above.
+
+- **No Datadog Agent anywhere in production, and therefore no production APM traces.**
+  `dd-trace-java` can only send traces to an Agent, the Agent needs ~0.5 GB, and the single
+  1 GB host is already carrying a JVM at ~500 MB plus Nginx and the OS. There is nowhere
+  left to put it. Running both on the app host would push it into steady-state swapping on
+  a network-attached boot volume — the app would be visibly broken to make a screenshot.
+- **APM is exercised locally instead.** During the 14-day trial: run the app plus a Datadog
+  Agent on the laptop, drive it with the `.http` collection, capture the flame graphs and
+  the service map. This is a real, working `dd-trace-java` setup and gives genuine interview
+  material about instrumentation and trace sampling — it is simply not the deployed
+  instance, and the README says so.
+- **The claims were narrowed to match.** §1's deliverable and the resume bullet now say
+  "metrics, dashboards and alerting" for production and name APM separately as local. This
+  is the honest version: a reviewer who asks "so what does your APM show in prod?" gets a
+  straight answer instead of a walk-back.
+- **What production actually keeps:** custom metrics via Micrometer straight to the Datadog
+  API (never needed an agent), the dashboard, and the error-rate monitor. Those run
+  continuously and are what the dashboard screenshot shows. Host infra metrics for the box
+  are the casualty of having no Agent.
+- **Rejected:** paying for a bigger shape for two weeks (defeats the free-tier point for a
+  screenshot); running the Agent on the app host anyway (breaks the running app);
+  dropping Datadog entirely (metrics, dashboard and monitor all still work and are the
+  larger part of the observability story).
+
 ### 2026-09-01 — Backend scaffolded
 
 - **Spring Boot 4.1.1, not 4.0.x.** Initializr's current line. §3 updated. No downside
@@ -355,6 +433,22 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 - **Testcontainers 2.x renamed its modules** — `junit-jupiter` → `testcontainers-junit-
   jupiter`, `mongodb` → `testcontainers-mongodb` — and the Boot parent does not manage
   their versions, so `testcontainers-bom` is imported explicitly.
+- **`LocalDate` storage must be pinned to UTC with explicit converters.** Spring Data
+  converts `LocalDate` to a BSON date using the **JVM's default timezone**, so the same
+  `appliedDate` is stored as a different instant depending on where the process runs — and
+  every "days to first response" or date-range calculation then differs between a dev
+  laptop and the UTC VPS, from identical data. `config/MongoConfig` registers
+  reading/writing converters fixed to UTC midnight. Found by `StatsServiceIT`, which
+  produced 5.1 average days locally against a hand-derived 5.4.
+- **MongoDB connection properties moved to `spring.mongodb.*` in Boot 4.** The Boot 3
+  prefix `spring.data.mongodb.*` is deprecated at level **`error`** since 4.0.0, which
+  means it is *not bound at all* — it does not warn, it silently falls back to the default
+  `mongodb://localhost/test`. Found because `IndexInitializer` reported creating all nine
+  indexes while `jobtracker.companies` did not exist: they had gone into a `test` database.
+  In prod this would have pointed the app at a `test` database on Atlas. The whole family
+  moved (`uri`, `database`, `host`, `port`, `username`, `password`, `ssl.*`,
+  `replica-set-name`, …). **Exception:** `spring.data.mongodb.auto-index-creation` stays
+  where it is — it is a Spring Data concern, not a connection one.
 - **JDK 25 is installed (Homebrew `openjdk@25`, 25.0.4.1) and IntelliJ already uses it**
   (SDK `homebrew-25`, language level 25). It is *not* symlinked into
   `/Library/Java/JavaVirtualMachines`, so `/usr/libexec/java_home -V` does not list it —
@@ -362,6 +456,137 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   cross-compiles with `--release 25` while IntelliJ compiles on 25. Set
   `JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home` in
   `~/.zshrc` so both agree.
+
+### 2026-09-01 — The three read queries
+
+Written while building follow-ups, upcoming interviews and free-text search — the last of
+the Phase 1 service layer.
+
+- **The read queries live in `application/ApplicationQueryService`, not `ApplicationService`.**
+  `ApplicationService` owns the write path and the four derived fields — the invariants that
+  are easy to break and where every line is load-bearing. These three are pure reads against
+  `MongoTemplate` that mutate nothing. Splitting them keeps the class holding the tricky
+  rules from acquiring a second, unrelated job, and mirrors `StatsService`, which was already
+  separate for the same reason. Rejected: putting them on the repository (they need
+  `MongoTemplate`, escaping and boundary math, none of which belongs in a derived query).
+- **`lastContactAt` is now seeded on *every* create, not only when the service generates the
+  submission stage.** A real bug, found by writing the gone-quiet query rather than by a
+  test. The query matches `lastContactAt: { $lte: now − 14 days }` and `null` is not `$lte`
+  anything — so an application created with its `stages[]` supplied, which skips
+  `seedSubmissionStage`, would have been permanently invisible to it. That is exactly the
+  shape of the Phase 4 backfill, so the whole historical job search would have been missing
+  from the one query it matters most for, silently, in the data hardest to eyeball.
+  Seeded from the furthest-forward stage date, falling back to `appliedDate` at local
+  midnight. `SCHEMA.md §1` records the rule.
+- **Upcoming interviews excludes terminal applications.** `SCHEMA.md §10.4` did not say so;
+  it does now. A round left sitting at `SCHEDULED` on an application you withdrew from is
+  stale data, not an appointment, and a calendar view that shows it is worse than one that
+  does not.
+- **`days` on upcoming interviews is capped at 365.** The endpoint answers "what is coming
+  up"; an uncapped window invites scanning the entire future for nothing.
+- **Follow-ups returns two named lists rather than one tagged list, and does not deduplicate
+  them.** "You said to chase this today" and "this has gone silent for a fortnight" prompt
+  different actions and the MCP tool renders them under different headings. An application in
+  both is the most urgent row in the response, not a duplicate to be collapsed. The response
+  also echoes the thresholds (7 and 14 days) so callers quote them instead of hardcoding
+  them.
+- **The gone-quiet half matches `status = ACTIVE` exactly, not merely non-terminal.** An
+  `OFFER` you have not answered is silence of your own making.
+- **Search input goes through `Pattern.quote`, and there is a test proving `.*` matches
+  nothing.** The escaping was already decided; what was not obvious is that the interesting
+  failure is not the crash on `(`. It is that an unescaped `.*` quietly returns the entire
+  collection — a wrong answer with no error attached. Both are pinned in
+  `ApplicationSearchIT`.
+
+### 2026-09-01 — Testcontainers: one container per JVM, not per test class
+
+Found the moment a second `*IT` class was added, which is the earliest it could possibly have
+been found — and it presented as `Connection refused` in *every* IT except the first,
+including `StatsServiceIT`, which had been green for days.
+
+- **`AbstractMongoIT` starts its container in a static initializer, with neither
+  `@Testcontainers` nor `@Container`.** That annotation pair binds the container's lifecycle
+  to a *test class*: it stops the container when the class finishes. With one IT class that
+  is invisible. With four, the first class's teardown stops the container while Spring's
+  cached application context still holds the old port, and every later class dies against a
+  port nothing is listening on. A static initializer gives one container for the whole JVM
+  run — matching the lifetime of the context Spring is already caching — and Ryuk removes it
+  when the JVM exits. This is Testcontainers' documented singleton-container pattern.
+- **The lesson generalises past this bug:** a green suite with a single integration-test class
+  says nothing about container lifecycle. The failure mode is not a wrong assertion, it is
+  infrastructure disappearing between classes, and it appears all at once.
+- **Import `org.testcontainers.mongodb.MongoDBContainer`.** Testcontainers 2.x ships *both*
+  that and `org.testcontainers.containers.MongoDBContainer`, the 1.x-compatible shim, and
+  both compile. Every snippet online uses the old one.
+
+### 2026-09-01 — Controllers, error handling, and the end of Phase 1's code
+
+- **`GlobalExceptionHandler` is a plain `@RestControllerAdvice`, not a subclass of
+  `ResponseEntityExceptionHandler`.** The base class already handles several of these
+  exceptions and quietly wins over any method that does not match the exact signature it
+  expects to override — a subtle way to have a handler that never runs. A plain advice makes
+  the mapping explicit: the list of `@ExceptionHandler` annotations *is* the API's error
+  contract. Every response is RFC 7807 `application/problem+json`; validation failures attach
+  an `errors` array naming every bad field, not just the first.
+- **Jackson's message is passed through on a bad enum value.** For `"source":
+  "CARRIER_PIGEON"` it reads "not one of the values accepted for Enum class: [REFERRAL,
+  COLD_APPLY, ...]" — it names every legal value, which is exactly what a caller needs and
+  what the MCP server will surface. The cost is exposing DTO type names; for a single-user
+  API whose entire schema is published in `SCHEMA.md`, that is not a secret. The "at
+  [Source: ...]" tail is trimmed off, since it helps nobody.
+- **Search returns `PagedModel`, not `Page`.** Serializing a `PageImpl` straight out emits
+  Spring Data's internal structure, which it explicitly warns is not a stable contract and
+  logs a warning about. `PagedModel` is the supported wrapper and gives
+  `{content, page:{size, number, totalElements, totalPages}}` — a shape the SPA's
+  `types.ts` and the MCP client can mirror without being broken by a Spring Data upgrade.
+- **All three stage operations return the whole updated application, not the stage.** A stage
+  mutation also moves `currentStageType`, sometimes `status`, and usually `lastContactAt`.
+  Returning just the stage would leave every caller holding a stale parent and needing a
+  second GET to discover what else changed.
+- **Route ordering is not load-bearing, contrary to appearances.** `/api/applications/
+  followups` and `/interviews` sit where `/{id}` could also match. Spring's
+  `PathPatternParser` scores a literal segment above a variable one regardless of declaration
+  order, so they resolve correctly wherever they appear in the file. Worth knowing because the
+  older `AntPathMatcher` did not, and every "declare the specific route first" answer online
+  is about that. `ApplicationControllerIT` pins it either way.
+- **`days` and `from`/`to` on `/api/stats` stay mutually exclusive at the controller
+  boundary** — the service raises the 400. Verified end to end rather than assumed.
+
+### 2026-09-01 — MockMvc needs its own starter on Boot 4
+
+- **`spring-boot-starter-webmvc-test` must be added explicitly**, and
+  `@AutoConfigureMockMvc` now lives in `org.springframework.boot.webmvc.test.autoconfigure`,
+  not `org.springframework.boot.test.autoconfigure.web.servlet`. Boot 4 split the test slices
+  into per-technology modules, and `spring-boot-starter-test` no longer carries the web one.
+  The failure is a plain "package does not exist", and every Boot 3 answer says to use the
+  starter you already have — so the natural next move is to doubt the import rather than the
+  dependency list. Same family of trap as the Testcontainers 2.x module rename.
+
+### 2026-09-01 — Atlas verified end to end, and two traps on the way there
+
+Phase 1's last open item, done: the app was pointed at the real M0 cluster, exercised, and
+pointed back at local Mongo. Confirmed against Atlas: connection to the 3-node replica set
+(1 primary, 2 secondaries), all 9 indexes created, a create/read round trip, the `$facet`
+stats aggregation, and regex search. `appliedDate` written as `2026-08-15` came back as
+`2026-08-15`, stored at `04:00Z` — midnight Eastern — which is the `MongoConfig` UTC
+converter doing its job against a real cluster rather than a container. Test data removed;
+the cluster is empty.
+
+- **Atlas's connection string has no database name in it.** The "Connect" dialog gives you
+  `mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/?retryWrites=true&w=majority` — note
+  `/?`, with nothing between the slash and the question mark. Pasted as-is the app dies at
+  startup with `IllegalArgumentException: Database name must not be empty`. `jobtracker`
+  goes in that gap. Worth contrasting with the `spring.data.mongodb.*` trap already in this
+  log: that one failed *silently* into a database called `test`, this one fails loudly. The
+  loud failure is the better bug, and it only exists because the prefix is right.
+- **A commented-out YAML block must be commented with `#` and no space** when the reader is
+  expected to uncomment it. `# mongodb:` uncommented by deleting only the `#` leaves a
+  leading space, which shifts the whole document to indent 1; the next key at column 0 then
+  reads as a second document and SnakeYAML reports `expected '<document start>', but found
+  '<block mapping start>'` **against that later line**, which looks like a duplicate-key
+  error somewhere else entirely. The template now uses `#mongodb:` at the correct
+  indentation, so "delete the `#`" is unambiguous and correct, and the `.example` is checked
+  by actually uncommenting it and parsing the result.
 
 ---
 
@@ -399,10 +624,33 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
 
 ## 8. Environment & configuration
 
-**Never commit secrets.** Local dev uses `backend/src/main/resources/application-local.yml`
-(gitignored if it holds anything sensitive) or environment variables. Prod reads
-everything from the systemd `EnvironmentFile` at `/etc/jobtracker/jobtracker.env` (mode
-`600`, owned by the service user).
+**Never commit secrets.** There is no single file — where a value lives depends on where the
+code runs:
+
+| Where it runs | Secrets live in | Committed? |
+|---|---|---|
+| **Your laptop** (backend, Phases 1–3) | `backend/config/application-local.yml` | No — gitignored. Copy `application-local.yml.example` beside it to start. |
+| **The VPS** (Phase 4+) | `/etc/jobtracker/jobtracker.env`, mode `600`, owned by the service user, loaded by systemd `EnvironmentFile=` | No — never in the repo at all |
+| **GitHub Actions** (Phase 4) | Repository secrets (`SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`) | No — not a file |
+| **MCP server** (Phase 6) | `mcp-server/.env` for dev; the `env` block of `claude_desktop_config.json` for real use | No — `.env` is gitignored, and the Claude Desktop config lives outside the repo |
+
+`backend/src/main/resources/application-local.yml` **is** committed and must stay free of
+secrets — it reads `${GOOGLE_CLIENT_ID:}` and friends, and serves as documentation of what
+the local profile expects. `backend/config/` is a **default Spring Boot config location**
+resolved against the working directory (`backend/`, for both the IntelliJ run configuration
+and `./mvnw spring-boot:run`), and it takes **higher precedence than the classpath** — so the
+file there overrides the committed one property by property without editing it. Verified by
+setting `server.port` in it and watching the app bind that port instead.
+
+**Do not use the IntelliJ run configuration's "Environment variables" field.**
+`.idea/runConfigurations/` is committed deliberately (PLAN.md Phase 0), so anything typed
+there is tracked by git. This is the one place the "just use env vars" habit backfires on
+this project.
+
+Tests need none of this: `./mvnw verify` uses Testcontainers and never reads the local
+config. The Datadog key is prod-only — the Micrometer registry is `enabled: false` outside
+the `prod` profile, so a key on the laptop would do nothing (in Phase 5 the local *Agent*
+takes `DD_API_KEY` through its own config, not the app's).
 
 | Variable | Used by | Example / notes |
 |---|---|---|
@@ -487,15 +735,17 @@ Two IntelliJ-specific gotchas for this stack:
 
 Full steps in `deploy/RUNBOOK.md` (written in Phase 4). Summary:
 
-1. Oracle A1 instance, Ubuntu 24.04, **reserved** public IP. Open 80/443 in the VCN
+1. Oracle `VM.Standard.E2.1.Micro` instance, Ubuntu 24.04 x86_64, **reserved** public IP.
+   Open 80/443 in the VCN
    Security List **and** in the instance's iptables (Ubuntu Oracle images block them by
    default).
-2. Install Temurin 25, Nginx, certbot. Add a 2 GB swap file.
+2. Install Temurin 25, Nginx, certbot. Add a **4 GB swap file** (`vm.swappiness=10`).
 3. `systemd` unit `jobtracker.service` runs
-   `java -XX:MaxRAMPercentage=50 -jar /opt/jobtracker/app.jar` with
-   `EnvironmentFile=/etc/jobtracker/jobtracker.env`. Default G1 collector — **not** ZGC
-   (see §6). A percentage rather than a hardcoded `-Xmx` so the unit survives a resize;
-   the JVM's own default is 25% of RAM, which is fine but leaves headroom unused.
+   `java -Xmx256m -XX:MaxMetaspaceSize=128m -Xss512k -jar /opt/jobtracker/app.jar` with
+   `EnvironmentFile=/etc/jobtracker/jobtracker.env`. **SerialGC** (the JVM's own choice on a
+   1-core sub-2 GB machine — don't override it), and an explicit `-Xmx` rather than
+   `MaxRAMPercentage`, which on 1 GB would leave nothing for metaspace, stacks and Nginx.
+   See §6.
 4. Nginx vhost: certbot TLS, serve `/var/www/jobtracker`, proxy `/api` `/oauth2` `/login`
    → `127.0.0.1:8080`.
 5. Atlas: add the VPS's public IP to the Network Access allowlist.

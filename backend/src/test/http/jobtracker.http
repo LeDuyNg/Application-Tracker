@@ -1,0 +1,384 @@
+# Job Tracker — API collection
+#
+# Run top to bottom the first time: requests that create something store the new id in a
+# global variable that later requests use. Pick the environment (local / prod) from the
+# dropdown at the top right. See README.md in this directory.
+#
+# The error cases at the bottom are not filler — Phase 5 re-runs this file against an
+# instrumented local run, and without them the captured traces contain no error spans.
+
+### Health — start here. If this is not UP, nothing below will work.
+GET {{host}}/actuator/health
+
+> {%
+    client.test("service is up", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+        client.assert(response.body.status === "UP", "health is " + response.body.status);
+    });
+%}
+
+
+############################################################
+# Companies
+############################################################
+
+### Create a company
+POST {{host}}/api/companies
+Content-Type: application/json
+
+{
+  "name": "Stripe",
+  "website": "https://stripe.com/jobs",
+  "industry": "Fintech",
+  "location": "Remote / South San Francisco, CA",
+  "contacts": [
+    {
+      "name": "Alex Kim",
+      "title": "Technical Recruiter",
+      "email": "akim@example.com",
+      "notes": "Covers all backend reqs; responds within a day"
+    }
+  ],
+  "notes": "Two roles open that fit. High interview bar, strong comp.",
+  "tags": ["Fintech", "HIGH-BAR"]
+}
+
+> {%
+    client.global.set("companyId", response.body.id);
+    client.test("created with a Location header", function () {
+        client.assert(response.status === 201, "expected 201, got " + response.status);
+        client.assert(response.headers.valueOf("Location") !== null, "no Location header");
+    });
+    client.test("tags are lowercased on save", function () {
+        client.assert(response.body.tags[0] === "fintech", "tags were not normalized");
+    });
+%}
+
+### Create a second company, to have something to group by
+POST {{host}}/api/companies
+Content-Type: application/json
+
+{ "name": "Datadog", "industry": "Observability" }
+
+> {% client.global.set("secondCompanyId", response.body.id); %}
+
+### List companies — alphabetical
+GET {{host}}/api/companies
+
+### Fetch one company
+GET {{host}}/api/companies/{{companyId}}
+
+
+############################################################
+# Applications
+############################################################
+
+### Create an application — minimal body
+# No status and no stages: the service defaults status to ACTIVE and seeds an
+# APPLICATION_SUBMITTED stage. This is the normal path.
+POST {{host}}/api/applications
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "role": "Backend Engineer, Payments",
+  "appliedDate": "2026-08-02",
+  "source": "REFERRAL",
+  "jobPostingUrl": "https://stripe.com/jobs/12345",
+  "location": "Remote (US)",
+  "workMode": "REMOTE",
+  "compensation": { "min": 150000, "max": 185000, "currency": "USD" },
+  "notes": "Referred by a former colleague. Team owns the ledger service. JD stresses Java + Kafka.",
+  "tags": ["referral", "payments"]
+}
+
+> {%
+    client.global.set("applicationId", response.body.id);
+    client.test("defaults are applied by the service, not the caller", function () {
+        client.assert(response.status === 201, "expected 201, got " + response.status);
+        client.assert(response.body.status === "ACTIVE", "status was not defaulted");
+        client.assert(response.body.stages.length === 1, "submission stage was not seeded");
+        client.assert(response.body.stages[0].type === "APPLICATION_SUBMITTED",
+                      "seeded the wrong stage type");
+        client.assert(response.body.companyName === "Stripe", "companyName was not denormalized");
+        client.assert(response.body.lastContactAt !== null, "lastContactAt was not seeded");
+    });
+%}
+
+### Create an application with its stages supplied — the Phase 4 backfill shape
+# Historical data: rounds that already happened. This is why scheduledAt is not @Future.
+POST {{host}}/api/applications
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "role": "Infrastructure Engineer",
+  "appliedDate": "2026-08-02",
+  "source": "COMPANY_WEBSITE",
+  "notes": "Applied same day as the Payments role.",
+  "stages": [
+    {
+      "type": "APPLICATION_SUBMITTED", "status": "PASSED",
+      "completedAt": "2026-08-02T04:00:00Z"
+    },
+    {
+      "type": "ONLINE_ASSESSMENT", "status": "FAILED",
+      "scheduledAt": "2026-08-06T00:00:00Z",
+      "completedAt": "2026-08-06T20:00:00Z",
+      "format": "ASYNC",
+      "notes": "Ran out of time on Q2"
+    }
+  ]
+}
+
+> {%
+    client.global.set("rejectedApplicationId", response.body.id);
+    client.test("a FAILED stage derives REJECTED", function () {
+        client.assert(response.body.status === "REJECTED",
+                      "status was " + response.body.status + ", expected REJECTED");
+    });
+    client.test("lastContactAt is seeded even when stages are supplied", function () {
+        client.assert(response.body.lastContactAt !== null,
+                      "null lastContactAt would hide this from the gone-quiet query");
+    });
+%}
+
+### Create an application at the other company, for grouping
+POST {{host}}/api/applications
+Content-Type: application/json
+
+{
+  "companyId": "{{secondCompanyId}}",
+  "role": "Site Reliability Engineer",
+  "appliedDate": "2026-07-15",
+  "source": "JOB_BOARD",
+  "notes": "C++ (senior) track. Heavy on-call."
+}
+
+### Fetch one application, with its stages
+GET {{host}}/api/applications/{{applicationId}}
+
+
+############################################################
+# Stages — the sub-resource
+############################################################
+
+### Add a scheduled interview
+# Scheduled three days out so it shows up in /interviews below. Uses a pre-request script
+# (IntelliJ 2023.1+) so the date is always in the future, whenever this file is run.
+< {%
+    request.variables.set("inThreeDays", new Date(Date.now() + 3 * 86400000).toISOString());
+%}
+POST {{host}}/api/applications/{{applicationId}}/stages
+Content-Type: application/json
+
+{
+  "type": "TECHNICAL_INTERVIEW",
+  "status": "SCHEDULED",
+  "scheduledAt": "{{inThreeDays}}",
+  "format": "VIDEO",
+  "interviewers": ["Priya N. (Staff Eng)"],
+  "notes": "45 min coding + 15 min API design"
+}
+
+> {%
+    client.global.set("stageId", response.body.stages[response.body.stages.length - 1].stageId);
+    client.test("the parent's derived fields moved too", function () {
+        client.assert(response.status === 201, "expected 201, got " + response.status);
+        client.assert(response.body.currentStageType === "TECHNICAL_INTERVIEW",
+                      "currentStageType is " + response.body.currentStageType);
+    });
+%}
+
+### Add a round that is expected but not yet booked
+POST {{host}}/api/applications/{{applicationId}}/stages
+Content-Type: application/json
+
+{ "type": "SUPERDAY", "status": "EXPECTED" }
+
+> {%
+    client.test("currentStageType stays on the lowest pending round", function () {
+        // Not SUPERDAY: round 4 is scheduled, round 5 is only pencilled in. Taking the
+        // latest pending stage here would report a round you have not reached.
+        client.assert(response.body.currentStageType === "TECHNICAL_INTERVIEW",
+                      "currentStageType jumped ahead to " + response.body.currentStageType);
+    });
+%}
+
+### Update a round — full replacement of its fields, not a merge
+PATCH {{host}}/api/applications/{{applicationId}}/stages/{{stageId}}
+Content-Type: application/json
+
+{
+  "type": "TECHNICAL_INTERVIEW",
+  "status": "PASSED",
+  "completedAt": "{{$isoTimestamp}}",
+  "format": "VIDEO",
+  "interviewers": ["Priya N. (Staff Eng)"],
+  "notes": "Went well — asked about idempotency keys and retries."
+}
+
+
+############################################################
+# The four read features
+############################################################
+
+### Stats — all time
+GET {{host}}/api/stats
+
+> {%
+    client.test("window is described, not just applied", function () {
+        client.assert(response.body.window.description === "all time",
+                      "description was: " + response.body.window.description);
+    });
+%}
+
+### Stats — rolling window
+GET {{host}}/api/stats?days=30
+
+### Stats — calendar month
+# "How many applications this month?" means a calendar month, which days=30 cannot express.
+GET {{host}}/api/stats?from=2026-08-01&to=2026-08-31
+
+### Search — partial word
+# "strip" is not a token and does not stem to "stripe": a $text index would return nothing
+# here. This is why search is a regex (SCHEMA.md §6).
+GET {{host}}/api/applications?q=strip
+
+> {%
+    client.test("partial words match", function () {
+        client.assert(response.body.page.totalElements >= 2,
+                      "expected both Stripe roles, got " + response.body.page.totalElements);
+    });
+%}
+
+### Search — matches notes as well as company and role
+GET {{host}}/api/applications?q=ledger
+
+### Search — regex metacharacters are literal text, not a pattern
+# Unescaped, this would be an unbalanced group and a 500. It should be a 200 that finds the
+# Datadog role, whose notes contain "C++ (senior)".
+GET {{host}}/api/applications?q=(senior)
+
+### Search — a wildcard matches nothing rather than everything
+# Unescaped, ".*" would match every document. This is the quieter half of the escaping bug:
+# a wrong answer with no error attached.
+GET {{host}}/api/applications?q=.*
+
+> {%
+    client.test("patterns are literal", function () {
+        client.assert(response.body.page.totalElements === 0,
+                      "escaping is not working — got " + response.body.page.totalElements);
+    });
+%}
+
+### Search — filters and paging
+GET {{host}}/api/applications?status=ACTIVE&page=0&size=10&sort=appliedDate,desc
+
+### Follow-ups — both groups
+GET {{host}}/api/applications/followups
+
+> {%
+    client.test("both groups and their thresholds are returned", function () {
+        client.assert(response.body.due !== undefined, "no due group");
+        client.assert(response.body.goneQuiet !== undefined, "no goneQuiet group");
+        client.assert(response.body.quietAfterDays === 14, "quiet threshold changed");
+    });
+%}
+
+### Upcoming interviews — default window of 7 days
+GET {{host}}/api/applications/interviews
+
+> {%
+    client.test("the interview added above is here", function () {
+        client.assert(response.status === 200, "expected 200, got " + response.status);
+    });
+%}
+
+### Upcoming interviews — explicit window
+GET {{host}}/api/applications/interviews?days=30
+
+
+############################################################
+# Error cases — deliberate. These generate the error spans Phase 5 needs.
+############################################################
+
+### 404 — unknown application
+GET {{host}}/api/applications/000000000000000000000000
+
+> {%
+    client.test("404 as RFC 7807 problem+json", function () {
+        client.assert(response.status === 404, "expected 404, got " + response.status);
+        client.assert(response.body.status === 404, "body is not a ProblemDetail");
+    });
+%}
+
+### 400 — validation, reporting every bad field at once
+POST {{host}}/api/applications
+Content-Type: application/json
+
+{ "companyId": "", "role": "" }
+
+> {%
+    client.test("every invalid field is listed, not just the first", function () {
+        client.assert(response.status === 400, "expected 400, got " + response.status);
+        client.assert(response.body.errors.length >= 4,
+                      "only " + response.body.errors.length + " errors reported");
+    });
+%}
+
+### 400 — unknown enum constant, answered with the legal values
+POST {{host}}/api/applications
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "role": "Backend Engineer",
+  "appliedDate": "2026-08-02",
+  "source": "CARRIER_PIGEON"
+}
+
+### 400 — a query parameter that will not convert
+GET {{host}}/api/applications?status=NOT_A_STATUS
+
+### 400 — a non-positive interview window
+GET {{host}}/api/applications/interviews?days=0
+
+### 400 — days and from/to are mutually exclusive
+GET {{host}}/api/stats?days=30&from=2026-08-01
+
+### 400 — SCHEDULED without a scheduledAt
+POST {{host}}/api/applications/{{applicationId}}/stages
+Content-Type: application/json
+
+{ "type": "HIRING_MANAGER", "status": "SCHEDULED" }
+
+### 409 — duplicate company name, whatever the casing
+POST {{host}}/api/companies
+Content-Type: application/json
+
+{ "name": "stripe" }
+
+### 409 — deleting a company that still has applications
+# Cascading would silently destroy interview history, so the service refuses and says how
+# many are in the way (CLAUDE.md §6).
+DELETE {{host}}/api/companies/{{companyId}}
+
+> {%
+    client.test("delete is blocked, and the error is actionable", function () {
+        client.assert(response.status === 409, "expected 409, got " + response.status);
+        client.assert(response.body.detail.indexOf("application") > -1,
+                      "the 409 does not say what is in the way");
+    });
+%}
+
+
+############################################################
+# Cleanup — run these to reset between passes
+############################################################
+
+### Delete the rejected application
+DELETE {{host}}/api/applications/{{rejectedApplicationId}}
+
+### Delete the main application
+DELETE {{host}}/api/applications/{{applicationId}}

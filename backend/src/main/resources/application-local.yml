@@ -1,9 +1,11 @@
 # Local development. Points at a throwaway MongoDB:
 #   docker run -d --name jt-mongo -p 27017:27017 mongo:8
 spring:
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/jobtracker
+  # `spring.mongodb.*`, NOT `spring.data.mongodb.*`. Boot 4 deprecated the old prefix at
+  # level "error", meaning it is not bound at all — it silently falls back to the default
+  # `mongodb://localhost/test` with no warning. See CLAUDE.md §6.
+  mongodb:
+    uri: mongodb://localhost:27017/jobtracker
 
   security:
     oauth2:

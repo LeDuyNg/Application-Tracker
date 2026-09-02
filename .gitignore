@@ -41,6 +41,22 @@ npm-debug.log*
 !.env.example
 !*.env.example
 
+# Local secrets for the backend. Spring Boot loads ./config/ (relative to the working
+# directory, i.e. backend/) at HIGHER precedence than src/main/resources, so
+# backend/config/application-local.yml overrides the committed application-local.yml
+# property by property. That is where a real Atlas URI, Google client secret or MCP token
+# goes on this machine. Verified: a server.port set there wins over the committed file.
+#
+# NOTE: do NOT put secrets in the IntelliJ run configuration's "Environment variables" box.
+# .idea/runConfigurations/ is committed on purpose (see the IntelliJ section above), so
+# anything typed there is tracked by git.
+backend/config/*
+!backend/config/*.example
+
+# IntelliJ HTTP Client. The private env file is where the Phase 2 bearer token will live.
+# The *.env rules above do NOT match it — the filename ends in .json.
+http-client.private.env.json
+
 # Key material. The Phase 4 CI deploy key and any TLS/keystore file must never land here.
 *.pem
 *.key
