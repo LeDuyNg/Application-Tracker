@@ -81,8 +81,13 @@ pointing into merged history. Harmless; delete them whenever.
   limiting, Atlas M0 over `authSource=admin`, three identities (`ubuntu` / `deploy` /
   `jobtracker`) with sudo scoped to one command. `deploy/RUNBOOK.md` is the full record,
   written and corrected as the deploy happened rather than after.
-- **CI/CD.** `.github/workflows/backend.yml` and `frontend.yml`, path-filtered, deploying
-  on push to `main`. The backend workflow SHA-names each JAR, repoints the `app.jar`
+- **CI/CD — verified deploying, not just written.** `.github/workflows/backend.yml` and
+  `frontend.yml`, path-filtered, on push to `main`. Both green as of 2026-09-02 19:02
+  (backend 1m42s, frontend 21s). Getting there took three red runs, and **two of them were
+  real bugs that only a clean machine could find** — a `@SpringBootTest` silently using the
+  dev Mongo container, and a CSRF assertion depending on shared-context state whose outcome
+  turned on Maven's filesystem-ordered `runOrder`. Both are in §4; neither was reachable from
+  a laptop. The backend workflow SHA-names each JAR, repoints the `app.jar`
   symlink, keeps the newest three as the rollback, and gates on `/actuator/health` polled
   **over ssh on the box** — the endpoint is loopback-only, so a runner curling the public
   URL would 401 and fail every deploy.
