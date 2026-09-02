@@ -453,6 +453,24 @@ notice.
 Get one deploy working manually before automating it. When CI later fails you will know
 whether the problem is the deploy or the pipeline.
 
+> **Do Step 9 first.** Atlas access has to work before the app can boot at all, so the
+> allowlist entry and a verified database user belong *before* this step, not after — the
+> numbering here is historical. `IndexInitializer` is an `ApplicationRunner`, so it runs
+> after Tomcat is already listening and is the first thing to actually open a Mongo
+> connection. When it throws, the failure looks like this, which reads as a crash rather
+> than a config problem:
+>
+> ```
+> ... Tomcat started on port 8080
+> ... GracefulShutdown : Graceful shutdown complete
+> systemd[1]: jobtracker.service: Main process exited, code=exited, status=1/FAILURE
+> ```
+>
+> The real cause is far higher up the journal. Two to tell apart:
+> `MongoTimeoutException` / `No server chosen` means the IP is not allowlisted;
+> `bad auth : authentication failed` means the allowlist is fine and the **credentials** are
+> wrong — most often punctuation in the password that was never percent-encoded.
+
 **On your laptop:**
 
 ```bash
