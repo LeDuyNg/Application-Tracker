@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.validation.ConstraintViolationException;
 
 /**
@@ -36,6 +37,12 @@ import jakarta.validation.ConstraintViolationException;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private final MeterRegistry metrics;
+
+    GlobalExceptionHandler(MeterRegistry metrics) {
+        this.metrics = metrics;
+    }
 
     // ------------------------------------------------- our own exceptions
 
@@ -148,7 +155,19 @@ public class GlobalExceptionHandler {
 
     // ------------------------------------------------------------- helpers
 
+    /**
+     * Every error response is built here, which makes this the one place worth counting them.
+     *
+     * <p>Tagged by status only. That is deliberate: {@code MetricsConfig} strips the
+     * {@code exception} tag from {@code http.server.requests} precisely because its value set
+     * is open-ended, and re-introducing the same unbounded dimension here would undo it. The
+     * status code is the bounded, actionable projection — six or so values, and the thing the
+     * Phase 5 error-rate monitor actually alerts on.
+     */
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
+        metrics.counter("jobtracker.api.errors", "status", String.valueOf(status.value()))
+                .increment();
+
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setTitle(title);
         problem.setType(URI.create("https://app4jobtrack.me/problems/" + slug(title)));

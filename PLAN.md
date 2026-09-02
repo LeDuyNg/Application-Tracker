@@ -735,21 +735,29 @@ confirmed in Phase 0.
 - [ ] Configure the Micrometer Datadog registry in `application-prod.yml`:
       `management.datadog.metrics.export.api-key=${DD_API_KEY}`,
       `...uri=https://api.${DD_SITE}`, a sensible `step` (e.g. 30s).
-- [ ] Custom metrics:
-  - `jobtracker.applications.created` — counter, incremented in `ApplicationService.create`.
-  - `jobtracker.stages.added` — counter, tagged by `stage_type`.
-  - `jobtracker.api.request.duration` — **note it will not arrive under that name.**
-    Actuator's timer exports as `http.server.requests`; renaming needs a `MeterFilter`.
-    Either rename it or drop the aspiration and use an explicit `@Timed` on the handful of
-    endpoints worth timing.
-  - `jobtracker.api.errors` — counter, incremented in `GlobalExceptionHandler`, tagged by
-    `status`.
-- [ ] **Stay inside the ~100-timeseries budget.** Pro allots 100 custom metrics per host and
+- [x] Custom metrics:
+  - `jobtracker.applications.created` — counter, in `ApplicationService.create`, incremented
+    **after** the save so rejected attempts do not count.
+  - `jobtracker.stages.added` — counter, tagged by `stage_type` (closed enum, so cardinality
+    cannot drift).
+  - ~~`jobtracker.api.request.duration`~~ — **aspiration dropped, as this bullet anticipated.**
+    `http.server.requests` is kept instead, with its templated `uri` tag, which answers
+    "which endpoint is slow" without inventing a second timer. No `@Timed` needed.
+  - `jobtracker.api.errors` — counter, in `GlobalExceptionHandler.problem()`, tagged by
+    `status` only.
+- [x] **Stay inside the ~100-timeseries budget.** Pro allots 100 custom metrics per host and
     you have one host; Datadog counts unique metric-name + tag-value combinations, and
     Micrometer expands a single timer into several metrics (count/sum/avg/max). Exporting
     `http.server.requests` unfiltered (`uri × method × status × outcome × exception`) can
     eat most of the budget alone. Add a `MeterFilter` that drops `outcome` and `exception`
     and keeps the templated `uri`, or don't export it at all. Never tag by application id.
+    **Done in `config/MetricsConfig`, and it went further than this bullet:** the filter is
+    an **allowlist**, not a blocklist. Boot's default binders (`jvm.gc.*`,
+    `jvm.threads.states`, `tomcat.*`, `logback.events`, the Mongo driver's pool listeners)
+    exceed 100 series on an idle app without anyone choosing to spend it, and a blocklist
+    means the next dependency that ships a binder quietly enlarges the bill. `MetricsIT`
+    probes the filter directly rather than asserting on whichever binders happen to be
+    present.
 - [ ] Redeploy; confirm metrics appear in Datadog Metrics Explorer, and check
       *Plan & Usage → Custom Metrics* for the actual series count once traffic has run for
       a day.
