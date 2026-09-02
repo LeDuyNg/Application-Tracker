@@ -26,7 +26,7 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 1 (backend CRUD) — **code complete**. One item blocked on Phase 0.
+**Current phase:** Phase 1 (backend CRUD) — **complete, including the Atlas check**. Phase 2 (auth) is next and is unblocked.
 **Branch:** `phase-1-backend-crud`, pushed and tracking `origin/phase-1-backend-crud`.
 `main` on the remote is still docs-only — the branch has not been merged.
 
@@ -46,15 +46,16 @@ disagree about *what is built*, check the code.
   plus deliberate error cases for the Phase 5 traces.
 - **84 tests green** (`./mvnw verify`): 20 unit, 64 integration across six `*IT` classes.
 
-### What is left in Phase 1
-Only the **blocked** item: point `application-local.yml` at a real Atlas URI once and confirm
-it works against the real cluster, then switch back to local Mongo. Needs the Atlas M0
-cluster from Phase 0.
+### Phase 1 is complete
+The last item — verifying against the real Atlas cluster — is done. Local dev is back on the
+Docker Mongo; the Atlas URI sits commented out in `backend/config/application-local.yml`
+(gitignored), two lines away from being re-enabled.
 
-**Suggested next step:** either finish Phase 0 (Atlas, Google OAuth client, Datadog student
-pack — the Datadog one carries the APM-trial-availability check, the only Phase 0 item with
-no recovery path if discovered late), or start **Phase 2 — authentication**, which needs the
-Google client ID/secret and so depends on Phase 0 anyway. Phase 0 is the real unblocker.
+**Suggested next step: Phase 2 — authentication.** The Google client ID and secret are in
+place, which was the only thing blocking it. Phase 0's remaining item is the **Datadog**
+student-pack redemption, and the APM-trial-availability check inside it is the one task with
+no recovery path if it is discovered late — worth doing before Phase 5 regardless of what
+else is in flight.
 
 ### Verified by hand, not just by tests
 The app was run on the `local` profile and driven end to end: company → application → stages
@@ -116,6 +117,8 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | Datadog registry | Auto-configures on classpath presence and demands an API key. Must stay `enabled: false` by default or every `@SpringBootTest` fails. |
 | Testcontainers 2.x | Modules renamed: `testcontainers-junit-jupiter`, `testcontainers-mongodb`. The Boot parent does not manage their versions — the BOM is imported explicitly. |
 | springdoc | Needs the **3.x** line for Boot 4. 2.x targets Boot 3 and will not work. |
+| Atlas SRV string | Has **no database name** — ends `/?retryWrites=...`. Pasted as-is: `IllegalArgumentException: Database name must not be empty` at startup. Put `jobtracker` between the `/` and the `?`. |
+| Commented-out YAML | Uncommenting `# key:` by deleting only the `#` leaves a leading space, shifting the document to indent 1. SnakeYAML then blames a *later* line with "expected '<document start>'". Comment as `#key:` at the right indent so deleting `#` alone is correct. |
 | MockMvc on Boot 4 | Needs **`spring-boot-starter-webmvc-test`** — `spring-boot-starter-test` no longer carries the web slice — and `@AutoConfigureMockMvc` moved to `org.springframework.boot.webmvc.test.autoconfigure`. Fails as "package does not exist". |
 | `@Testcontainers` + `@Container` | Ties the container to a **test class** — it is stopped when that class ends, so every later `*IT` gets `Connection refused` against a cached port. Start it in a static initializer. |
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |

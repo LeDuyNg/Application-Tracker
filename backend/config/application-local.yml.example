@@ -13,22 +13,37 @@
 #
 # Nothing here is needed to run the tests: `./mvnw verify` uses Testcontainers and never
 # reads this file.
-
-# --- MongoDB -----------------------------------------------------------------
-# Only needed to point local dev at Atlas instead of the local Docker container. The
-# committed application-local.yml already points at mongodb://localhost:27017/jobtracker,
-# which is what you want for day-to-day work. Uncomment for the one-off Atlas check that
-# PLAN.md Phase 1 asks for, then comment it out again.
 #
-# spring:
-#   mongodb:
-#     uri: mongodb+srv://USER:PASSWORD@cluster.xxxxx.mongodb.net/jobtracker?retryWrites=true&w=majority
+# NOTE THE SHAPE: there is exactly ONE top-level `spring:` key, and everything under Spring
+# hangs off it. YAML rejects a document with the same top-level key twice — the failure is
+# "expected '<document start>', but found '<block mapping start>'" at config-load time,
+# before the app starts, and it names the *second* occurrence rather than the duplication.
+# So when you uncomment the MongoDB block below, leave it nested where it is.
 
-# --- Google OAuth (needed from Phase 2) --------------------------------------
-# From Google Cloud Console → APIs & Services → Credentials → your Web application client.
-# The redirect URI is set in the committed application-local.yml and points at :5173, the
-# Vite dev server — not :8080. See PLAN.md Phase 3's gotcha about this.
 spring:
+
+  # --- MongoDB --------------------------------------------------------------
+  # Local dev normally uses the Docker container, which the committed
+  # application-local.yml already points at. Uncomment below only for the one-off Atlas
+  # check PLAN.md Phase 1 asks for, then comment it out again.
+  #
+  # To enable: delete ONLY the `#` on the two lines below. The indentation after it is
+  # already correct. (Deleting `# ` — hash *and* space — shifts everything left by one and
+  # produces "expected '<document start>', but found '<block mapping start>'", which points
+  # at a later line and reads like a duplicate-key problem. It is not.)
+  #
+  # THE DATABASE NAME IS NOT OPTIONAL. Atlas's "Connect" dialog gives you a string ending
+  # in `/?retryWrites=...` with nothing between the slash and the question mark. Paste that
+  # as-is and the app dies at startup with "Database name must not be empty". Put
+  # `jobtracker` in that gap, exactly as shown here.
+  #
+  #mongodb:
+  #  uri: mongodb+srv://USER:PASSWORD@cluster.xxxxx.mongodb.net/jobtracker?retryWrites=true&w=majority
+
+  # --- Google OAuth (needed from Phase 2) -----------------------------------
+  # Google Cloud Console → APIs & Services → Credentials → your Web application client.
+  # The redirect URI lives in the committed application-local.yml and points at :5173, the
+  # Vite dev server — not :8080. See PLAN.md Phase 3's gotcha about this.
   security:
     oauth2:
       client:
@@ -52,7 +67,7 @@ app:
   # that anything downstream can misread.
   mcp-token: PASTE_A_LONG_RANDOM_STRING_HERE
 
-# --- Datadog -----------------------------------------------------------------
+# --- Datadog ----------------------------------------------------------------
 # Deliberately absent. The Micrometer registry is `enabled: false` outside the prod profile
 # (see application.yml), so a key here would do nothing. In Phase 5 the local Datadog *Agent*
 # takes DD_API_KEY through its own config, not through the app.

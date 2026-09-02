@@ -56,7 +56,7 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 1 — backend CRUD: code complete.** 16 endpoints, RFC 7807 errors, 84 tests green, driven end to end by hand. Only the Atlas-URI check remains, blocked on Phase 0. **Phase 2 (auth) is next, and needs Phase 0's Google client.** |
+| **Current phase** | **Phase 1 — backend CRUD: complete.** 16 endpoints, RFC 7807 errors, 84 tests green, driven end to end by hand and verified against the real Atlas M0. **Phase 2 (auth) is next and is unblocked** — the Google client exists. |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
@@ -561,6 +561,32 @@ including `StatsServiceIT`, which had been green for days.
   The failure is a plain "package does not exist", and every Boot 3 answer says to use the
   starter you already have — so the natural next move is to doubt the import rather than the
   dependency list. Same family of trap as the Testcontainers 2.x module rename.
+
+### 2026-09-01 — Atlas verified end to end, and two traps on the way there
+
+Phase 1's last open item, done: the app was pointed at the real M0 cluster, exercised, and
+pointed back at local Mongo. Confirmed against Atlas: connection to the 3-node replica set
+(1 primary, 2 secondaries), all 9 indexes created, a create/read round trip, the `$facet`
+stats aggregation, and regex search. `appliedDate` written as `2026-08-15` came back as
+`2026-08-15`, stored at `04:00Z` — midnight Eastern — which is the `MongoConfig` UTC
+converter doing its job against a real cluster rather than a container. Test data removed;
+the cluster is empty.
+
+- **Atlas's connection string has no database name in it.** The "Connect" dialog gives you
+  `mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/?retryWrites=true&w=majority` — note
+  `/?`, with nothing between the slash and the question mark. Pasted as-is the app dies at
+  startup with `IllegalArgumentException: Database name must not be empty`. `jobtracker`
+  goes in that gap. Worth contrasting with the `spring.data.mongodb.*` trap already in this
+  log: that one failed *silently* into a database called `test`, this one fails loudly. The
+  loud failure is the better bug, and it only exists because the prefix is right.
+- **A commented-out YAML block must be commented with `#` and no space** when the reader is
+  expected to uncomment it. `# mongodb:` uncommented by deleting only the `#` leaves a
+  leading space, which shifts the whole document to indent 1; the next key at column 0 then
+  reads as a second document and SnakeYAML reports `expected '<document start>', but found
+  '<block mapping start>'` **against that later line**, which looks like a duplicate-key
+  error somewhere else entirely. The template now uses `#mongodb:` at the correct
+  indentation, so "delete the `#`" is unambiguous and correct, and the `.example` is checked
+  by actually uncommenting it and parsing the result.
 
 ---
 

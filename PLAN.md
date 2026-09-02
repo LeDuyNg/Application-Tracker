@@ -71,7 +71,7 @@ path in `CLAUDE.md §5` becomes real.
       it cannot do. Single-user traffic is well within it.
 - [x] Assign a **reserved public IP** (not ephemeral) to the instance.
 - [x] Add your SSH public key during creation; confirm `ssh ubuntu@<ip>` works.
-- [ ] **Open ports 80 and 443** — this is two steps:
+- [x] **Open ports 80 and 443** — this is two steps:
   - [x] VCN → Security List → add ingress rules: `0.0.0.0/0` TCP 80 and 443.
   - [x] On the instance: the Ubuntu image ships iptables rules that also block them —
         add `iptables` ACCEPT rules for 80/443 and persist with `netfilter-persistent
@@ -82,26 +82,29 @@ path in `CLAUDE.md §5` becomes real.
       network-attached and steady-state swapping would be painfully slow.
 
 ### MongoDB Atlas
-- [ ] Create a free account and an **M0** cluster (pick the region closest to the Oracle
+- [x] Create a free account and an **M0** cluster (pick the region closest to the Oracle
       region).
-- [ ] Database user for the app (strong generated password). Save credentials in your
+- [x] Database user for the app (strong generated password). Save credentials in your
       password manager.
-- [ ] Network Access → allowlist: add the Oracle instance's **reserved public IP** (`/32`).
+- [x] Network Access → allowlist: add the Oracle instance's **reserved public IP** (`/32`).
       Also add your current IP for local admin.
-- [ ] Copy the **SRV connection string**; note the DB name will be `jobtracker`.
-- [ ] For inspecting data during dev, use IntelliJ's **Database** tool window (`+` →
+- [x] Copy the **SRV connection string**; note the DB name will be `jobtracker`.
+      **The string Atlas hands you contains no database name** — it ends `/?retryWrites=...`
+      with nothing between the slash and the question mark. Put `jobtracker` in that gap, or
+      the app dies at startup with `Database name must not be empty` (`CLAUDE.md §6`).
+- [x] For inspecting data during dev, use IntelliJ's **Database** tool window (`+` →
       MongoDB → paste the SRV string). MongoDB Compass is an alternative if you'd rather
       have a separate window — you don't need both.
 
 ### Google Cloud (OAuth)
-- [ ] Create a project ("job-tracker").
-- [ ] OAuth consent screen: External, in "Testing" mode, add your Google account as a
+- [x] Create a project ("job-tracker").
+- [x] OAuth consent screen: External, in "Testing" mode, add your Google account as a
       test user (that's enough for single-user; no verification needed).
-- [ ] Create an **OAuth 2.0 Client ID** (type: Web application):
+- [x] Create an **OAuth 2.0 Client ID** (type: Web application):
   - Authorized redirect URIs:
     `http://localhost:8080/login/oauth2/code/google`
     `https://<your-domain>/login/oauth2/code/google`
-- [ ] Save the client ID and secret.
+- [x] Save the client ID and secret.
 
 ### Datadog
 
@@ -308,8 +311,12 @@ auth yet** (added in Phase 2).
       against a running instance rather than written and assumed. The error cases at the end
       are deliberate — without them the Phase 5 traces contain no error spans. See
       `src/test/http/README.md`.)*
-- [ ] Point `application-local.yml` at the **Atlas** URI once and confirm it works against
+- [x] Point `application-local.yml` at the **Atlas** URI once and confirm it works against
       the real cluster; then switch back to local Mongo for fast iteration.
+      *(Done via `backend/config/application-local.yml`, the gitignored override, so the
+      committed file stays secret-free. Verified against the real M0: replica-set connection,
+      9 indexes created, a create/read round trip, the `$facet` stats aggregation, regex
+      search, and `LocalDate` surviving the trip intact. Test data removed afterwards.)*
 
 **Done when:** `mvn verify` is green; Swagger UI at `/swagger-ui.html` lists every
 endpoint; you can drive the whole company→application→stages→reads flow manually; the four
