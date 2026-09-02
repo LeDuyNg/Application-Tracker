@@ -910,6 +910,36 @@ locally through OpenTelemetry to a Jaeger/Tempo container. **Dropped.**
 so it reads as a decision to anyone reviewing the repo — which is the same convention already
 applied to frontend tests and Kubernetes.
 
+### 2026-09-02 — Multi-user reconsidered, and deliberately declined
+
+Raised during Phase 4 prep and settled the same day. **No change: single user, enforced by
+the email allowlist.** §14's non-goal stands as written.
+
+Recorded because of *when* it was asked. The database is still empty — the Phase 4 backfill
+has not run — so this was the one moment where adding `ownerId` to `companies` and
+`applications` was a schema edit rather than a data migration. That window closes as soon as
+real applications are entered. Passing it up is a choice, not an oversight, and a later
+session should not have to guess whether it was ever considered.
+
+- **What multi-tenancy would have cost here**, since the audit was done anyway: `ownerId` on
+  both collections keyed on the OIDC `sub` claim (not email — emails change); owner scoping
+  on both repositories, `CompanyService`, `ApplicationService`, `ApplicationQueryService`'s
+  three queries and `StatsService`'s `$facet`; `name_unique` becoming a compound
+  `{ownerId, name}` index, because a globally unique company name means the second person to
+  apply to Stripe gets a 409; an ownership check inside `ApplicationService.requireCompany`,
+  or user A can attach an application to user B's company; per-user MCP tokens, since the
+  current static one is permitted on `GET /api/**` and would read everyone's data; and
+  cross-tenant tests across all 16 endpoints. The frontend would barely change.
+- **Why not, beyond effort.** A missed owner filter fails *silently* — it leaks data rather
+  than throwing. A half-finished multi-tenant app is worse for a portfolio than a clean
+  single-user one that documents the constraint, which §14 already does.
+- **Open public signup was rejected more firmly.** It adds abuse handling, storage growth on
+  a 512 MB shared M0, account deletion and export, and the obligation of holding *strangers'*
+  recruiter names, emails and phone numbers in `contacts[]` — third-party personal data, with
+  backups currently deferred. Mostly obligation, very little engineering signal.
+- **If this is ever revisited**, the allowlisted-but-private variant is the one to build:
+  real multi-tenancy with no abuse surface. Open signup is not.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
