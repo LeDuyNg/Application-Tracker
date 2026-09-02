@@ -1,0 +1,51 @@
+# Local secrets — COPY THIS FILE to `application-local.yml` in this same directory.
+#
+#     cp backend/config/application-local.yml.example backend/config/application-local.yml
+#
+# Why here and not in src/main/resources/application-local.yml: Spring Boot loads `./config/`
+# (relative to the working directory, which is `backend/` for both the IntelliJ run config
+# and `./mvnw spring-boot:run`) at HIGHER precedence than the classpath. So this file
+# overrides the committed one property by property, and the committed one stays free of
+# secrets and readable as documentation.
+#
+# `backend/config/application-local.yml` is gitignored. This `.example` file is not — it is
+# the template, and it must never hold a real value.
+#
+# Nothing here is needed to run the tests: `./mvnw verify` uses Testcontainers and never
+# reads this file.
+
+# --- MongoDB -----------------------------------------------------------------
+# Only needed to point local dev at Atlas instead of the local Docker container. The
+# committed application-local.yml already points at mongodb://localhost:27017/jobtracker,
+# which is what you want for day-to-day work. Uncomment for the one-off Atlas check that
+# PLAN.md Phase 1 asks for, then comment it out again.
+#
+# spring:
+#   mongodb:
+#     uri: mongodb+srv://USER:PASSWORD@cluster.xxxxx.mongodb.net/jobtracker?retryWrites=true&w=majority
+
+# --- Google OAuth (needed from Phase 2) --------------------------------------
+# From Google Cloud Console → APIs & Services → Credentials → your Web application client.
+# The redirect URI is set in the committed application-local.yml and points at :5173, the
+# Vite dev server — not :8080. See PLAN.md Phase 3's gotcha about this.
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: PASTE_GOOGLE_CLIENT_ID_HERE
+            client-secret: PASTE_GOOGLE_CLIENT_SECRET_HERE
+
+app:
+  # The single Google account allowed to log in. Comma-separated, but keep it to one.
+  allowed-emails: you@example.com
+
+  # Shared with the MCP server, which sends it as `Authorization: Bearer <token>`.
+  # Generate one with:  openssl rand -base64 48
+  mcp-token: PASTE_A_LONG_RANDOM_STRING_HERE
+
+# --- Datadog -----------------------------------------------------------------
+# Deliberately absent. The Micrometer registry is `enabled: false` outside the prod profile
+# (see application.yml), so a key here would do nothing. In Phase 5 the local Datadog *Agent*
+# takes DD_API_KEY through its own config, not through the app.

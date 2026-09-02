@@ -598,10 +598,33 @@ including `StatsServiceIT`, which had been green for days.
 
 ## 8. Environment & configuration
 
-**Never commit secrets.** Local dev uses `backend/src/main/resources/application-local.yml`
-(gitignored if it holds anything sensitive) or environment variables. Prod reads
-everything from the systemd `EnvironmentFile` at `/etc/jobtracker/jobtracker.env` (mode
-`600`, owned by the service user).
+**Never commit secrets.** There is no single file — where a value lives depends on where the
+code runs:
+
+| Where it runs | Secrets live in | Committed? |
+|---|---|---|
+| **Your laptop** (backend, Phases 1–3) | `backend/config/application-local.yml` | No — gitignored. Copy `application-local.yml.example` beside it to start. |
+| **The VPS** (Phase 4+) | `/etc/jobtracker/jobtracker.env`, mode `600`, owned by the service user, loaded by systemd `EnvironmentFile=` | No — never in the repo at all |
+| **GitHub Actions** (Phase 4) | Repository secrets (`SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`) | No — not a file |
+| **MCP server** (Phase 6) | `mcp-server/.env` for dev; the `env` block of `claude_desktop_config.json` for real use | No — `.env` is gitignored, and the Claude Desktop config lives outside the repo |
+
+`backend/src/main/resources/application-local.yml` **is** committed and must stay free of
+secrets — it reads `${GOOGLE_CLIENT_ID:}` and friends, and serves as documentation of what
+the local profile expects. `backend/config/` is a **default Spring Boot config location**
+resolved against the working directory (`backend/`, for both the IntelliJ run configuration
+and `./mvnw spring-boot:run`), and it takes **higher precedence than the classpath** — so the
+file there overrides the committed one property by property without editing it. Verified by
+setting `server.port` in it and watching the app bind that port instead.
+
+**Do not use the IntelliJ run configuration's "Environment variables" field.**
+`.idea/runConfigurations/` is committed deliberately (PLAN.md Phase 0), so anything typed
+there is tracked by git. This is the one place the "just use env vars" habit backfires on
+this project.
+
+Tests need none of this: `./mvnw verify` uses Testcontainers and never reads the local
+config. The Datadog key is prod-only — the Micrometer registry is `enabled: false` outside
+the `prod` profile, so a key on the laptop would do nothing (in Phase 5 the local *Agent*
+takes `DD_API_KEY` through its own config, not the app's).
 
 | Variable | Used by | Example / notes |
 |---|---|---|
