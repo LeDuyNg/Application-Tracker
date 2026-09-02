@@ -504,7 +504,7 @@ whether the problem is the deploy or the pipeline.
 **On your laptop:**
 
 ```bash
-cd backend && ./mvnw clean verify          # 103 tests
+cd backend && ./mvnw clean verify          # 112 tests (25 unit, 87 integration)
 scp -i ~/.ssh/jobtracker_deploy target/jobtracker-0.0.1-SNAPSHOT.jar \
     deploy@<VPS_IP>:/opt/jobtracker/app-manual.jar
 

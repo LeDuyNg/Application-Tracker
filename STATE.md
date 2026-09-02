@@ -26,12 +26,15 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** **Phase 6 — MCP server**, on branch `phase-6-mcp` (not yet merged).
-The server is **built, tested against the live API, and wired into Claude Desktop's config**.
-What is left needs a human at the machine: restart Claude Desktop, confirm the four tools
-appear, run the example queries, save the transcripts. Phases 1–5 are done and merged. The
-app is live at `https://app4jobtrack.me`, auto-deploying from `main`, with metrics, a
-dashboard and an error-rate monitor in Datadog (**us5**).
+**Current phase:** **Phase 7 — README & polish.** `README.md` is written and complete except
+for five asset slots — two screenshots and three MCP transcripts — with `docs/CAPTURE.md`
+giving the exact capture instructions. **Phase 6 is merged** (`phase-6-mcp`, `--no-ff`); the
+MCP server is connected in Claude Desktop and answering, but the four example queries have
+not been run there and no transcripts are saved, so Phase 6 is functionally complete rather
+than closed. The app is live at `https://app4jobtrack.me`, auto-deploying from `main`, with
+metrics, a dashboard and an error-rate monitor in Datadog (**us5**).
+
+**`main` is not pushed.** The Phase 6 merge and the README commit are local only.
 
 *Phase 5, closed 2026-09-02:* three domain counters
 (`jobtracker.applications.created`, `.stages.added` by `stage_type`, `.api.errors` by
@@ -71,9 +74,9 @@ pointing into merged history. Harmless; delete them whenever.
   - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
-- **112 tests green** (`./mvnw verify`): 25 unit, 87 integration. Verified with the local
-  `jt-mongo` container **stopped** — see the ambient-Mongo trap in §4; a green run with it
-  running proves less than it appears to.
+- **112 tests green** (`./mvnw verify`): 25 unit, 87 integration. **Re-confirmed 2026-09-02**
+  with the local `jt-mongo` container **stopped** — see the ambient-Mongo trap in §4; a green
+  run with it running proves less than it appears to.
 - **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
   proxies `/api`, `/oauth2`, `/login` → `:8080`. `src/api/` = `types.ts` (DTO mirrors),
   `client.ts` (the one `fetch` wrapper: session cookie, `X-XSRF-TOKEN` on mutations,
@@ -116,7 +119,7 @@ pointing into merged history. Harmless; delete them whenever.
   `jobPostingUrl` / `website` at both ends (stored-XSS sink), `app.mcp-token` local default
   removed, `@Valid` moved onto type arguments (HV000271), collection + page-size caps,
   `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
-  `/actuator/health` narrowed to loopback callers. **103 tests green.** Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
+  `/actuator/health` narrowed to loopback callers. **103 tests green at the time** (112 as of 2026-09-02, after Phase 5 and 6 — re-verified with `jt-mongo` stopped: 25 unit, 87 integration). Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
 - **Phase 6 — MCP server (built, not yet driven from Claude Desktop).** `mcp-server/` on
   the MCP SDK 1.30 over stdio, TypeScript 6 + zod 4 (matching `frontend/`). Four read-only
   tools — `get_application_stats`, `list_pending_followups`, `search_applications`,

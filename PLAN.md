@@ -955,7 +955,11 @@ notes.
 
 **Prerequisites:** Phases 1–6 done and deployed.
 
-- [ ] `README.md`:
+- [~] `README.md` — **written 2026-09-02**, complete except the captured assets. Five slots
+      are marked with HTML comments and `docs/CAPTURE.md` says exactly what to capture and
+      where to save it; `grep -n "SCREENSHOT\|TRANSCRIPT" README.md` lists what is left.
+      The two image tags are commented out rather than left dangling, so nothing renders as a
+      broken image before the files exist.
   - One-paragraph what/why; live URL.
   - Architecture diagram (reuse `CLAUDE.md §4`, cleaned up — or a real diagram).
   - Stack table.
@@ -969,6 +973,9 @@ notes.
     than an unqualified claim that invites an awkward question).
   - MCP: the config snippet + 2–3 example query transcripts.
   - Screenshots of the dashboard UI.
+  - *Added, not in the original list:* a note that the live link is **single-user behind an
+    email allowlist**, so a visitor lands on the landing page and cannot get in. Without it
+    the deployment reads as broken to exactly the audience the link exists for.
 - [ ] `deploy/RUNBOOK.md` finalized (server setup, deploy, rollback, restore-from-backup).
 - [ ] Fill in `CLAUDE.md §9` with the now-real commands; set `CLAUDE.md §2` to "shipped".
 - [ ] Interview prep notes (`docs/interview-notes.md` or a private doc):

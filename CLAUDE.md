@@ -61,13 +61,13 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 6 — MCP server**, on branch `phase-6-mcp`. The server is built, tested against the live API and wired into `claude_desktop_config.json`; what remains is restarting Claude Desktop and running the four example queries. Phases 1–5 done and merged. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
+| **Current phase** | **Phase 7 — README & polish.** `README.md` is written and awaiting captured screenshots/transcripts (`docs/CAPTURE.md`). Phases 1–6 done and merged; Phase 6's server is live in Claude Desktop, with the four example queries and their transcripts still to be run. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | **`https://app4jobtrack.me`** — live since 2026-09-02. Deploy record: `deploy/RUNBOOK.md`. |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–5, each merged `--no-ff` so every phase boundary is a commit. Current branch: `phase-6-mcp`. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–6, each merged `--no-ff` so every phase boundary is a commit. Working on `main`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
