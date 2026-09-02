@@ -210,7 +210,7 @@ sudo systemctl enable --now fail2ban
 ```bash
 sudo -u jobtracker tee /etc/jobtracker/jobtracker.env >/dev/null <<'EOF'
 SPRING_PROFILES_ACTIVE=prod
-MONGODB_URI=mongodb+srv://USER:PASS@cluster.xxxxx.mongodb.net/jobtracker?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://USER:PASS@cluster0.sfdtyrk.mongodb.net/jobtracker?retryWrites=true&w=majority&appName=jobtracker
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 APP_ALLOWED_EMAILS=duy.le.21.ng@gmail.com
@@ -229,13 +229,41 @@ Generate the MCP token and paste it in (Phase 6 needs the same value):
 openssl rand -hex 32
 ```
 
-Four traps in that file:
+Five things in that file worth understanding:
 
-- **`MONGODB_URI` must carry the database name.** Atlas's dialog gives you
-  `...mongodb.net/?retryWrites=...` — note `/?`, with nothing between. Put `jobtracker` in
-  that gap or the app dies at startup with `Database name must not be empty`.
+- **`MONGODB_URI` must carry the database name**, and the password must be URL-safe.
+  Atlas's dialog gives you `...mongodb.net/?appName=Cluster0` — note `/?`, with nothing
+  between. `jobtracker` goes in that gap or the app dies at startup with `Database name
+  must not be empty`. Substitute `USER`/`PASS` and delete the angle brackets Atlas wraps
+  its placeholders in. The string is a **URI**, so a password containing `@ : / ? # [ ] %`
+  must be percent-encoded — an unencoded `@` splits the userinfo in the wrong place and
+  surfaces as a host-lookup or auth error nowhere near the password:
+  `python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" 'p@ss'`.
+  Easiest alternative: give the DB user an alphanumeric password.
+- **`APP_ALLOWED_EMAILS` is the entire authorization model.** Anyone on the internet can
+  start a Google login — that is Google's page, not ours — so Google only establishes *who
+  someone is*. This line is what decides whether that person may use the app, checked in
+  `AllowlistOidcUserService.verify()` alongside Google's `email_verified` claim (an
+  unverified address is a string the account holder typed, not an identity).
+
+  It is comma-separated and matched case-insensitively — values are trimmed and lowercased
+  when bound, so `Duy.Le.21.NG@Gmail.com` in the file still matches. The address must be the
+  one Google actually returns for the account you sign in with; a Workspace alias or a
+  secondary address will not match, and you will get a 403 that looks like a broken login.
+
+  **Empty admits nobody, and that is deliberate** (`CLAUDE.md §6`). An allowlist that fails
+  open is not an allowlist: a deploy that forgets this variable locks you out, which is
+  recoverable in thirty seconds by editing this file and restarting; the alternative admits
+  the internet, which is not.
+
+  **Adding a second address grants full access, not partial.** The app is single-user by
+  design (`§14`) — there are no per-document ownership checks anywhere, because there has
+  only ever needed to be one owner. A second person on this line sees every application,
+  every note, and every compensation figure.
+
 - **`APP_MCP_TOKEN` empty means the MCP server cannot authenticate.** That is the intended
-  fail-closed default, not a bug. Fill it before Phase 6.
+  fail-closed default, not a bug — the same fail-closed reasoning as the allowlist above.
+  Fill it before Phase 6; it is not needed for Phase 4.
 - **`APP_BASE_URL` has no trailing slash** and must be the **apex**, matching Google exactly.
 - **`DD_API_KEY` must hold the real key** — Phase 0 is complete and one is generated, so
   paste it in along with `DD_SITE`. Metrics then start flowing from the first boot;
