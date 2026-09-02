@@ -192,6 +192,36 @@ sudo chmod -R g+w /opt/jobtracker /var/www/jobtracker
 Three identities on purpose: `ubuntu` is you, `deploy` is CI (no sudo except one command),
 `jobtracker` runs the JVM and owns the secrets (no login shell at all).
 
+**Give `deploy` its SSH key now**, not in Step 11. It has a home directory and no
+`authorized_keys`, and Step 4e turned password authentication off — so until this is done
+`deploy` cannot log in at all, and Step 7's `scp` fails with a bare
+`Permission denied (publickey)`.
+
+Note the shape of this: `ssh-copy-id deploy@<VPS_IP>` **cannot work**, because it has to
+authenticate as `deploy` in order to install a key for `deploy`. The key has to go in
+through `ubuntu`, which is the only account that can currently get in.
+
+```bash
+# on your laptop — no passphrase, because CI cannot type one
+ssh-keygen -t ed25519 -f ~/.ssh/jobtracker_deploy -N "" -C "github-actions-jobtracker"
+
+cat ~/.ssh/jobtracker_deploy.pub | ssh ubuntu@<VPS_IP> \
+  "sudo mkdir -p /home/deploy/.ssh \
+   && sudo tee -a /home/deploy/.ssh/authorized_keys >/dev/null \
+   && sudo chown -R deploy:deploy /home/deploy/.ssh \
+   && sudo chmod 700 /home/deploy/.ssh \
+   && sudo chmod 600 /home/deploy/.ssh/authorized_keys"
+
+ssh -i ~/.ssh/jobtracker_deploy deploy@<VPS_IP> 'whoami && id'
+```
+
+That must print `deploy` and show `jobtracker` among its groups — the group membership is
+what gives it write access to `/opt/jobtracker`.
+
+The `700` on `.ssh` and `600` on `authorized_keys` are not cosmetic: sshd silently ignores
+keys from a world-readable directory and reports the same
+`Permission denied (publickey)`, with nothing in the client output to say why.
+
 ### 4e. SSH hardening
 
 ```bash
@@ -405,10 +435,11 @@ whether the problem is the deploy or the pipeline.
 
 ```bash
 cd backend && ./mvnw clean verify          # 103 tests
-scp target/jobtracker-0.0.1-SNAPSHOT.jar deploy@<VPS_IP>:/opt/jobtracker/app-manual.jar
+scp -i ~/.ssh/jobtracker_deploy target/jobtracker-0.0.1-SNAPSHOT.jar \
+    deploy@<VPS_IP>:/opt/jobtracker/app-manual.jar
 
 cd ../frontend && npm ci && npm run build
-rsync -avz --delete dist/ deploy@<VPS_IP>:/var/www/jobtracker/
+rsync -avz --delete -e 'ssh -i ~/.ssh/jobtracker_deploy' dist/ deploy@<VPS_IP>:/var/www/jobtracker/
 ```
 
 **On the server:**
@@ -517,11 +548,10 @@ Verify with `GET /api/stats` against the live app before deleting anything local
 
 ## Step 11 — CI/CD
 
-**Generate a deploy-only SSH key** (on your laptop, no passphrase — CI cannot type one):
+**The deploy key already exists** — it was generated and installed in Step 4d, because
+Step 7 needs it. Nothing to do here but confirm it still works:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/jobtracker_deploy -N "" -C "github-actions-jobtracker"
-ssh-copy-id -i ~/.ssh/jobtracker_deploy.pub deploy@<VPS_IP>
 ssh -i ~/.ssh/jobtracker_deploy deploy@<VPS_IP> 'echo ok'
 ```
 
