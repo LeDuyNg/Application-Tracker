@@ -464,16 +464,43 @@ cd ../frontend && npm ci && npm run build
 rsync -avz --delete -e 'ssh -i ~/.ssh/jobtracker_deploy' dist/ deploy@<VPS_IP>:/var/www/jobtracker/
 ```
 
-**On the server:**
+**On the server — and mind which user runs what.** These two lines need different accounts,
+which is the easiest thing here to get wrong:
+
+- `deploy` owns the JAR and the symlink. It is in the `jobtracker` group, so it can write
+  `/opt/jobtracker`.
+- `ubuntu` is you, and is **not** in that group — it gets `r-x` on that directory. Running
+  the symlink step as `ubuntu` fails with `ln: failed to create symbolic link 'app.jar':
+  Permission denied`, even though the `scp` a moment earlier succeeded (that went over the
+  deploy account).
 
 ```bash
-cd /opt/jobtracker && ln -sfn app-manual.jar app.jar
-sudo systemctl start jobtracker
-sudo systemctl status jobtracker          # active (running)
-journalctl -u jobtracker -f               # watch it boot
+# as deploy — repoint the symlink. CI does exactly this on every deploy, so if it needs
+# sudo now it will need sudo then, and Step 11's sudoers entry covers only systemctl.
+ssh jobtracker-deploy 'cd /opt/jobtracker && ln -sfn app-manual.jar app.jar && ls -l'
 
-curl -s localhost:8080/actuator/health    # {"status":"UP"}
+# as ubuntu — start it and watch
+ssh app4jobtracker      # or ubuntu@<VPS_IP>
+sudo systemctl start jobtracker
+sudo systemctl status jobtracker --no-pager   # active (running)
+journalctl -u jobtracker -f                   # watch it boot
+
+curl -s localhost:8080/actuator/health        # {"status":"UP"}
 ```
+
+If the symlink step fails as `deploy` too, the group membership did not take — `id` will not
+list `jobtracker`. Fix with `sudo usermod -aG jobtracker deploy` and reconnect; group changes
+only apply to new sessions.
+
+Check the JAR is readable by the service account while you are there — it runs as
+`jobtracker`, not `deploy`:
+
+```bash
+ssh jobtracker-deploy 'ls -l /opt/jobtracker/'   # want -rw-r--r--
+```
+
+A restrictive local umask can land it `600` owned by `deploy`, and the service then fails to
+start with an error that says nothing about permissions.
 
 If it will not start, `journalctl -u jobtracker -n 100` is the answer. The usual causes are
 in Step 5.
