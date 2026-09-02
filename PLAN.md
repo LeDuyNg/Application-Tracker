@@ -955,11 +955,9 @@ notes.
 
 **Prerequisites:** Phases 1–6 done and deployed.
 
-- [~] `README.md` — **written 2026-09-02**, complete except the captured assets. Five slots
-      are marked with HTML comments and `docs/CAPTURE.md` says exactly what to capture and
-      where to save it; `grep -n "SCREENSHOT\|TRANSCRIPT" README.md` lists what is left.
-      The two image tags are commented out rather than left dangling, so nothing renders as a
-      broken image before the files exist.
+- [x] `README.md` — **written and complete 2026-09-02**, including both screenshots and a
+      four-exchange MCP transcript. One optional improvement left, in `docs/CAPTURE.md §2`:
+      the Datadog capture shows an empty "Add Widgets" placeholder and is worth re-shooting.
   - One-paragraph what/why; live URL.
   - Architecture diagram (reuse `CLAUDE.md §4`, cleaned up — or a real diagram).
   - Stack table.

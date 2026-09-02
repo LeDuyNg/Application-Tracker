@@ -1,6 +1,9 @@
 # Capture checklist — the README's images and transcripts
 
-`README.md` has five slots waiting on assets only you can produce. Each is marked with an
+**Status (2026-09-02): all five slots are filled.** One optional re-shoot is outstanding —
+see §2. Keep this file as the reference for re-capturing anything that goes stale.
+
+`README.md` had five slots waiting on assets only you can produce. Each is marked with an
 HTML comment at the point it belongs. Save files to `docs/images/` with the exact names
 below and nothing else needs editing.
 
@@ -28,6 +31,12 @@ recruiter sees before deciding whether to keep scrolling.
 
 In the Observability section.
 
+> **Worth re-shooting.** The current capture has an empty *"Add Widgets or Powerpacks"*
+> placeholder occupying the whole top-right quadrant, and roughly 40% of the frame is empty
+> because the widgets are stacked in a left column. On the page that argues you made
+> deliberate observability decisions, an "add widgets" prompt reads as unfinished. Delete
+> that placeholder panel, drag the four widgets into a 2×2, and re-shoot.
+
 - Datadog → Dashboards → **Job Tracker — API**.
 - Set the time range to the widest window with real data (7d or 30d). A dashboard of flat
   zero lines is worse than no screenshot.
@@ -47,6 +56,12 @@ screenshot it or paste the text.
 | "How many applications have I sent this month?" | `get_application_stats` with `from`/`to` |
 | "Which companies haven't I heard back from in 2+ weeks?" | `list_pending_followups` |
 | "What interviews do I have this week?" | `get_upcoming_interviews` |
+
+> **Done.** Captured and reformatted in the README's "A real session" section. The client's
+> own tool-discovery lines (`Found tools`, `query: select:mcp__job-tracker__…`,
+> `max_results:`) were stripped — that is the *client's* machinery, not this server, and
+> leaving it in implied the tools are named `mcp__job-tracker__*` when they are not. Every
+> word the model wrote is verbatim.
 
 **Text beats a screenshot here**, and it is the format the README slots assume — it stays
 readable on a phone, is searchable, and survives GitHub's image rendering. Something like:
