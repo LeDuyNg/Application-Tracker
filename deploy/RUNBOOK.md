@@ -222,6 +222,28 @@ The `700` on `.ssh` and `600` on `authorized_keys` are not cosmetic: sshd silent
 keys from a world-readable directory and reports the same
 `Permission denied (publickey)`, with nothing in the client output to say why.
 
+**If you use `~/.ssh/config` aliases, mind what they match on.** A `Host myserver` block
+matches the *alias*, not the address inside it — so if you connect as `ssh myserver`, then
+`ssh ubuntu@<VPS_IP>` matches nothing, falls back to the default identities
+(`~/.ssh/id_ed25519`, `~/.ssh/id_rsa`), and fails with the same
+`Permission denied (publickey)` on a box you can otherwise reach fine. Substitute your alias
+wherever this runbook writes `ubuntu@<VPS_IP>`.
+
+Worth adding an alias for the deploy account too, and pinning both to one key:
+
+```
+Host jobtracker-deploy
+    HostName <VPS_IP>
+    User deploy
+    IdentityFile ~/.ssh/jobtracker_deploy
+    IdentitiesOnly yes
+```
+
+`IdentitiesOnly yes` matters once you have a few keys: ssh offers them one at a time and
+sshd's default `MaxAuthTries` is 6, so unrelated keys tried first can exhaust the limit and
+fail a connection that would otherwise work. With the alias in place, Step 7 is just
+`scp … jobtracker-deploy:/opt/jobtracker/app-manual.jar`.
+
 ### 4e. SSH hardening
 
 ```bash
