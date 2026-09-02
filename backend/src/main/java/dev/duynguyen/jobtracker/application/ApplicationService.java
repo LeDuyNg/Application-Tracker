@@ -7,6 +7,9 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import dev.duynguyen.jobtracker.application.dto.ApplicationResponse;
 import dev.duynguyen.jobtracker.application.dto.CreateApplicationRequest;
 import dev.duynguyen.jobtracker.application.dto.StageRequest;
@@ -37,13 +40,24 @@ public class ApplicationService {
     private final CompanyRepository companies;
     private final ApplicationMapper mapper;
     private final TimeService time;
+    private final MeterRegistry metrics;
+
+    /**
+     * Resolved once rather than per call. An untagged counter has exactly one identity, so
+     * looking it up on every create would be a map lookup for no reason.
+     */
+    private final Counter applicationsCreated;
 
     ApplicationService(ApplicationRepository applications, CompanyRepository companies,
-                       ApplicationMapper mapper, TimeService time) {
+                       ApplicationMapper mapper, TimeService time, MeterRegistry metrics) {
         this.applications = applications;
         this.companies = companies;
         this.mapper = mapper;
         this.time = time;
+        this.metrics = metrics;
+        this.applicationsCreated = Counter.builder("jobtracker.applications.created")
+                .description("Applications created, ever. The rate is the interesting part.")
+                .register(metrics);
     }
 
     // ---------------------------------------------------------------- CRUD
@@ -71,7 +85,13 @@ public class ApplicationService {
         seedLastContact(a);
 
         syncDerivedFields(a);
-        return mapper.toResponse(applications.save(a));
+        ApplicationResponse created = mapper.toResponse(applications.save(a));
+
+        // Counted after the save, not before: validation and the companyId check both throw,
+        // and a counter that includes rejected attempts measures the client rather than the
+        // job search.
+        applicationsCreated.increment();
+        return created;
     }
 
     public ApplicationResponse update(String id, UpdateApplicationRequest r) {
@@ -124,7 +144,15 @@ public class ApplicationService {
         a.setStages(stages);
         touchContact(a);
         syncDerivedFields(a);
-        return mapper.toResponse(applications.save(a));
+        ApplicationResponse updated = mapper.toResponse(applications.save(a));
+
+        // Tagged by type, which is what makes a funnel possible: 14 possible values, all
+        // from a closed enum, so the cardinality cannot drift (MetricsConfig). Resolved per
+        // call because the tag value varies; Micrometer caches by meter id, so this is a
+        // map lookup rather than a registration.
+        metrics.counter("jobtracker.stages.added", "stage_type", stage.getType().name())
+                .increment();
+        return updated;
     }
 
     public ApplicationResponse updateStage(String applicationId, String stageId, StageRequest r) {

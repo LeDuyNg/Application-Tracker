@@ -18,6 +18,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -49,6 +50,8 @@ class ApplicationServiceTest {
     private static final LocalDate TODAY = LocalDate.of(2026, 9, 1);
     private static final String COMPANY_ID = "company-1";
 
+    private SimpleMeterRegistry metrics;
+
     @Mock private ApplicationRepository applications;
     @Mock private CompanyRepository companies;
 
@@ -57,7 +60,11 @@ class ApplicationServiceTest {
     @BeforeEach
     void setUp() {
         TimeService time = new TimeService(Clock.fixed(NOW, ZoneId.of("UTC")), ZONE);
-        service = new ApplicationService(applications, companies, new ApplicationMapper(), time);
+        // A real SimpleMeterRegistry rather than a mock: it is in-memory, has no
+        // dependencies, and lets the counter assertions below read actual values instead
+        // of verifying that increment() was called on a stub.
+        metrics = new SimpleMeterRegistry();
+        service = new ApplicationService(applications, companies, new ApplicationMapper(), time, metrics);
 
         // Saving echoes the entity back, so assertions read the object the service built.
         // lenient() because Mockito's strict stubs flag this as unused in the tests that
