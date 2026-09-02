@@ -208,12 +208,10 @@ auth yet** (added in Phase 2).
       would have been field-for-field identical: `PATCH` on a stage is a full replacement of
       its fields, not a partial merge, because a record cannot distinguish "absent" from
       "explicitly null" without wrapper types. One record, documented as such.)*
-- [~] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
+- [x] Response records: `CompanyResponse`, `ApplicationResponse` (includes `stages`),
       `ApplicationSummaryResponse` (compact, for lists/search), `StatsResponse`,
-      `UpcomingInterviewResponse`, `FollowupResponse`.  
-      *(Done: `CompanyResponse`, `ApplicationResponse`, `ApplicationSummaryResponse`,
-      `StatsResponse`. `UpcomingInterviewResponse` and `FollowupResponse` are written
-      with the queries that produce them.)*
+      `UpcomingInterviewResponse`, `FollowupResponse`. Plus `ApplicationSearchRequest`, the
+      filter bundle for the search endpoint's query parameters.
 - [x] Hand-written `CompanyMapper`, `ApplicationMapper` (no MapStruct).
 
 ### Services
@@ -239,13 +237,17 @@ auth yet** (added in Phase 2).
 - [x] Stage operations: `addStage`, `updateStage(stageId, ...)`, `deleteStage(stageId)`.
 - [x] `StatsService` (in `stats/`): the `$facet` aggregation from `SCHEMA.md §10.1`;
       compute rates in Java per `SCHEMA.md §9`.
-- [ ] Follow-ups query (`SCHEMA.md §10.2`) — both halves: `followUpDate` due, **and** the
+- [x] Follow-ups query (`SCHEMA.md §10.2`) — both halves: `followUpDate` due, **and** the
       gone-quiet union on `lastContactAt`, tagged in the response so the two groups are
       distinguishable.
-- [ ] Upcoming-interviews aggregation (`SCHEMA.md §10.4`).
-- [ ] Free-text search as an **escaped** case-insensitive regex over `companyName` / `role`
+- [x] Upcoming-interviews aggregation (`SCHEMA.md §10.4`).
+- [x] Free-text search as an **escaped** case-insensitive regex over `companyName` / `role`
       / `notes` (`SCHEMA.md §10.3`). `Pattern.quote` the user's input — an unescaped `(` is
       a 500 and a pathological pattern is a cheap DoS.
+      *(All three live in `ApplicationQueryService`, not `ApplicationService` — see
+      `CLAUDE.md §6`. Building these turned up a real bug: `lastContactAt` was never set on
+      an application created with its stages supplied, which would have hidden the entire
+      Phase 4 backfill from the gone-quiet query. Fixed and recorded in `SCHEMA.md §1`.)*
 - [x] `TimeService` in `common/` wrapping a `Clock` + `app.timezone` for all relative-date
       math (`SCHEMA.md §7`).
 
@@ -283,8 +285,12 @@ auth yet** (added in Phase 2).
 - [ ] `ApplicationControllerIT`: happy path for every endpoint + 404 + 400 cases.
 - [x] `StatsServiceIT`: seed ~10 applications across statuses/stages, assert the funnel and
       each rate from `SCHEMA.md §9`.
-- [ ] `UpcomingInterviewsIT`, `FollowupsIT`: boundary cases (exactly `days` away, terminal
-      statuses excluded).
+- [x] `UpcomingInterviewsIT`, `FollowupsIT`: boundary cases (exactly `days` away, terminal
+      statuses excluded). Plus `ApplicationSearchIT` — substring and case-insensitive
+      matching (what `$text` could not do), and the escaping cases: `(` must not 500 and
+      `.*` must match nothing rather than everything.
+      *(Adding a second `*IT` class exposed a container-lifecycle bug in `AbstractMongoIT`
+      that had been latent while only one existed — `CLAUDE.md §6`.)*
 - [ ] `mvn verify` green.
 
 ### Manual verification

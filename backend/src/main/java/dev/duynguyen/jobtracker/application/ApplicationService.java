@@ -68,6 +68,7 @@ public class ApplicationService {
         a.setStages(r.stages() == null || r.stages().isEmpty()
                 ? List.of(seedSubmissionStage(a))
                 : buildStages(r.stages()));
+        seedLastContact(a);
 
         syncDerivedFields(a);
         return mapper.toResponse(applications.save(a));
@@ -289,6 +290,32 @@ public class ApplicationService {
         stage.setCompletedAt(time.startOfDay(a.getAppliedDate()));
         a.setLastContactAt(stage.getCompletedAt());
         return stage;
+    }
+
+    /**
+     * Gives every new application a {@code lastContactAt}, including one created with its
+     * stages supplied.
+     *
+     * <p>{@link #seedSubmissionStage} already sets the field, but it only runs when the
+     * caller sends <em>no</em> stages. An application created with its rounds attached —
+     * which is exactly what the Phase 4 backfill of the in-progress job search does — would
+     * otherwise be saved with a null {@code lastContactAt} and never appear in the gone-quiet
+     * query, because {@code null} is not {@code $lte} any date. Silently invisible, and only
+     * in the historical data, which is the hardest place to notice it.
+     *
+     * <p>The value is the furthest-forward thing that has happened on any stage. A future
+     * {@code scheduledAt} counts and is meant to: a booked interview is not a process that
+     * has gone quiet.
+     */
+    private void seedLastContact(Application a) {
+        if (a.getLastContactAt() != null) {
+            return;
+        }
+        a.setLastContactAt(a.getStages().stream()
+                .flatMap(s -> java.util.stream.Stream.of(s.getCompletedAt(), s.getScheduledAt()))
+                .filter(java.util.Objects::nonNull)
+                .max(java.time.Instant::compareTo)
+                .orElseGet(() -> time.startOfDay(a.getAppliedDate())));
     }
 
     private List<Stage> buildStages(List<StageRequest> requests) {

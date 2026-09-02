@@ -56,13 +56,13 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 1 — backend CRUD.** Project setup done (scaffold builds, `mvn verify` green); domain layer is the next task. |
+| **Current phase** | **Phase 1 — backend CRUD.** Service layer complete (domain, repositories, DTOs, mappers, all four read features; 62 tests green). Controllers + `GlobalExceptionHandler` are next. |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — local commits not yet pushed. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `phase-1-backend-crud` is pushed; `main` is still docs-only. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
@@ -456,6 +456,68 @@ description implies. This supersedes the "APM uses the second free micro" bullet
   cross-compiles with `--release 25` while IntelliJ compiles on 25. Set
   `JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home` in
   `~/.zshrc` so both agree.
+
+### 2026-09-01 — The three read queries
+
+Written while building follow-ups, upcoming interviews and free-text search — the last of
+the Phase 1 service layer.
+
+- **The read queries live in `application/ApplicationQueryService`, not `ApplicationService`.**
+  `ApplicationService` owns the write path and the four derived fields — the invariants that
+  are easy to break and where every line is load-bearing. These three are pure reads against
+  `MongoTemplate` that mutate nothing. Splitting them keeps the class holding the tricky
+  rules from acquiring a second, unrelated job, and mirrors `StatsService`, which was already
+  separate for the same reason. Rejected: putting them on the repository (they need
+  `MongoTemplate`, escaping and boundary math, none of which belongs in a derived query).
+- **`lastContactAt` is now seeded on *every* create, not only when the service generates the
+  submission stage.** A real bug, found by writing the gone-quiet query rather than by a
+  test. The query matches `lastContactAt: { $lte: now − 14 days }` and `null` is not `$lte`
+  anything — so an application created with its `stages[]` supplied, which skips
+  `seedSubmissionStage`, would have been permanently invisible to it. That is exactly the
+  shape of the Phase 4 backfill, so the whole historical job search would have been missing
+  from the one query it matters most for, silently, in the data hardest to eyeball.
+  Seeded from the furthest-forward stage date, falling back to `appliedDate` at local
+  midnight. `SCHEMA.md §1` records the rule.
+- **Upcoming interviews excludes terminal applications.** `SCHEMA.md §10.4` did not say so;
+  it does now. A round left sitting at `SCHEDULED` on an application you withdrew from is
+  stale data, not an appointment, and a calendar view that shows it is worse than one that
+  does not.
+- **`days` on upcoming interviews is capped at 365.** The endpoint answers "what is coming
+  up"; an uncapped window invites scanning the entire future for nothing.
+- **Follow-ups returns two named lists rather than one tagged list, and does not deduplicate
+  them.** "You said to chase this today" and "this has gone silent for a fortnight" prompt
+  different actions and the MCP tool renders them under different headings. An application in
+  both is the most urgent row in the response, not a duplicate to be collapsed. The response
+  also echoes the thresholds (7 and 14 days) so callers quote them instead of hardcoding
+  them.
+- **The gone-quiet half matches `status = ACTIVE` exactly, not merely non-terminal.** An
+  `OFFER` you have not answered is silence of your own making.
+- **Search input goes through `Pattern.quote`, and there is a test proving `.*` matches
+  nothing.** The escaping was already decided; what was not obvious is that the interesting
+  failure is not the crash on `(`. It is that an unescaped `.*` quietly returns the entire
+  collection — a wrong answer with no error attached. Both are pinned in
+  `ApplicationSearchIT`.
+
+### 2026-09-01 — Testcontainers: one container per JVM, not per test class
+
+Found the moment a second `*IT` class was added, which is the earliest it could possibly have
+been found — and it presented as `Connection refused` in *every* IT except the first,
+including `StatsServiceIT`, which had been green for days.
+
+- **`AbstractMongoIT` starts its container in a static initializer, with neither
+  `@Testcontainers` nor `@Container`.** That annotation pair binds the container's lifecycle
+  to a *test class*: it stops the container when the class finishes. With one IT class that
+  is invisible. With four, the first class's teardown stops the container while Spring's
+  cached application context still holds the old port, and every later class dies against a
+  port nothing is listening on. A static initializer gives one container for the whole JVM
+  run — matching the lifetime of the context Spring is already caching — and Ryuk removes it
+  when the JVM exits. This is Testcontainers' documented singleton-container pattern.
+- **The lesson generalises past this bug:** a green suite with a single integration-test class
+  says nothing about container lifecycle. The failure mode is not a wrong assertion, it is
+  infrastructure disappearing between classes, and it appears all at once.
+- **Import `org.testcontainers.mongodb.MongoDBContainer`.** Testcontainers 2.x ships *both*
+  that and `org.testcontainers.containers.MongoDBContainer`, the 1.x-compatible shim, and
+  both compile. Every snippet online uses the old one.
 
 ---
 

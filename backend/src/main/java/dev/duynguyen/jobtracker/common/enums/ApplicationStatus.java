@@ -35,4 +35,16 @@ public enum ApplicationStatus {
     public boolean isTerminal() {
         return this == ACCEPTED || this == REJECTED || this == WITHDRAWN || this == GHOSTED;
     }
+
+    /**
+     * The terminal statuses, for the {@code $nin} clauses in the follow-ups and
+     * upcoming-interviews queries (SCHEMA.md §10.2, §10.4).
+     *
+     * <p>Derived from {@link #isTerminal()} rather than listed again, so adding a status
+     * cannot leave the two definitions disagreeing — which would show up as a closed
+     * application quietly reappearing in your follow-up list.
+     */
+    public static java.util.List<ApplicationStatus> terminal() {
+        return java.util.Arrays.stream(values()).filter(ApplicationStatus::isTerminal).toList();
+    }
 }
