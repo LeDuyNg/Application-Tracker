@@ -56,7 +56,7 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (102 tests). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
+| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (103 tests). A pre-deploy security pass has been applied (§6, 2026-09-02). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
 | **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
@@ -184,12 +184,12 @@ Application-Tracker/
 │   └── src/
 │       ├── main/java/dev/duynguyen/jobtracker/
 │       │   ├── JobTrackerApplication.java
-│       │   ├── config/        ← SecurityConfig, MongoConfig, OpenApiConfig, IndexInitializer
+│       │   ├── config/        ← SecurityConfig, MongoConfig, OpenApiConfig, IndexInitializer, WebConfig
 │       │   ├── company/       ← Company, CompanyRepository, CompanyService, CompanyController, dto/
 │       │   ├── application/   ← Application, Stage, *Repository, *Service, *Controller, dto/
 │       │   ├── stats/         ← StatsService (MongoTemplate aggregations), StatsController
 │       │   ├── auth/          ← BearerTokenFilter, AllowlistOidcUserService, ProblemDetailAuthHandler, MeController
-│       │   └── common/        ← GlobalExceptionHandler, enums/, error DTO, time utils
+│       │   └── common/        ← GlobalExceptionHandler, enums/, error DTO, time utils, Validation
 │       ├── main/resources/
 │       │   ├── application.yml            ← shared defaults
 │       │   ├── application-local.yml      ← local dev (localhost Mongo, Swagger on)
@@ -201,9 +201,9 @@ Application-Tracker/
 │   └── src/
 │       ├── main.tsx / App.tsx
 │       ├── api/               ← apiClient.ts, types.ts (mirror backend DTOs), hooks/
-│       ├── components/        ← StatCard, StatusBadge, StageTimeline, FiltersBar, ...
+│       ├── components/        ← StatCard, StatusBadge, StageTimeline, FiltersBar, SafeLink, ...
 │       ├── pages/             ← Dashboard, ApplicationsList, ApplicationDetail, ApplicationForm
-│       └── lib/               ← formatting, date helpers
+│       └── lib/               ← formatting, date helpers, url.ts (href scheme allowlist)
 │
 ├── mcp-server/                ← TypeScript MCP server (runs locally)
 │   ├── package.json / tsconfig.json
@@ -214,7 +214,8 @@ Application-Tracker/
 │
 ├── deploy/
 │   ├── jobtracker.service     ← systemd unit for the API
-│   ├── nginx-jobtracker.conf  ← Nginx vhost
+│   ├── nginx-jobtracker.conf  ← Nginx vhost (rate limiting; written in Phase 3)
+│   ├── jobtracker-proxy.conf  ← proxy_set_header snippet, incl. X-Forwarded-Proto
 │   ├── backup-mongo.sh        ← mongodump + push to Oracle Object Storage (rclone)
 │   ├── backup-mongo.service   ← + backup-mongo.timer (systemd timer)
 │   └── RUNBOOK.md             ← step-by-step server setup + deploy + restore
@@ -734,6 +735,71 @@ feedback. Merged to `main` with the UI explicitly a first pass.
   framework, ~450 lines.
 - **`index.html`** loads Fraunces + Inter + JetBrains Mono from Google Fonts; new favicon
   (pine funnel mark). `color-scheme: light`.
+
+### 2026-09-02 — Pre-deploy security pass
+
+A full read of the backend and frontend before Phase 4, looking for security flaws rather
+than bugs. The two-chain auth model, the constant-time token comparison, the allowlist,
+CSRF wiring, regex escaping and the absence of any XSS sink all held up unchanged; git
+history was scanned across every ref and carries only placeholders. Six changes came out
+of it. Recorded here because each is a rule, not a fix.
+
+- **URL fields are scheme-restricted, at both ends.** `jobPostingUrl` and `company.website`
+  were `@Size`-only and were rendered straight into `<a href>`. React escapes text content
+  but **not** href attributes, so a stored `javascript:alert(1)` was a link that ran script
+  in the app's own origin — stored XSS whose only mitigation was that the app has one
+  writer. Backend: `common/Validation.HTTP_URL` on all four DTO fields. Frontend:
+  `lib/url.ts` parses with `new URL()` (not a regex — it normalises `JaVaScRiPt:`, leading
+  control characters and whitespace before the protocol is read) and `components/SafeLink`
+  is now the only place a stored URL becomes a link. Two independent checks deliberately:
+  the constraint cannot retroactively clean rows written before it existed.
+- **`app.mcp-token` no longer has a working default on the `local` profile.** It was
+  `${APP_MCP_TOKEN:local-dev-token-change-me}` — a read token for the entire API, published
+  in a public repo, live for anyone who ever boots prod with the wrong profile active. Now
+  `${APP_MCP_TOKEN:}`, which `BearerTokenFilter`'s `isBlank()` guard turns into "nobody
+  authenticates". Fails closed, matching what `AppProperties` already argued for the
+  allowlist. Prod was already correct (no default at all).
+- **`@Valid` moved onto the type argument** — `List<@Valid ContactRequest>`, not
+  `@Valid List<ContactRequest>`. Both cascade today, but Hibernate Validator deprecated the
+  container form (HV000271, warned on every startup). If support is dropped, nested contact
+  and stage validation stops running **silently** — no error, just unvalidated input. The
+  warnings are gone from the build, which is how the fix was confirmed.
+- **Collections are bounded and so is page size.** `stages` ≤ 50, `contacts` /
+  `interviewers` / `tags` ≤ 20, and `config/WebConfig` caps the pageable resolver at 100
+  (Spring Data's default max is **2000** — `@PageableDefault(size = 20)` sets the default,
+  it does not cap what a caller may ask for). Self-inflicted only, since there is one
+  writer, but `?size=2000` against `-Xmx256m` on a 1 GB box is a one-line OOM.
+- **`deploy/nginx-jobtracker.conf` + `deploy/jobtracker-proxy.conf` written early.** Two
+  things could not wait for Phase 4. Rate limiting (`limit_req_zone` for `/api` at 10r/s,
+  `/oauth2` and `/login` at 1r/s, plus `limit_conn` and a 256k body cap): a flood does not
+  need to authenticate to take down a 1/8-OCPU box. And `X-Forwarded-Proto`, without which
+  `request.isSecure()` is false behind Nginx and Spring builds the OAuth `redirect_uri` as
+  `http://` — Google then rejects it and **login fails outright**, not degrades. The proxy
+  headers live in one snippet because three near-identical `location` blocks is how they
+  drift.
+- **`server.forward-headers-strategy: framework` was already set in `application-prod.yml`.**
+  Flagged as a suspected gap and found to be a false alarm. Noted so it is not "fixed" again.
+- **`/actuator/health` is permitted on loopback only.** It has to stay unauthenticated —
+  the deploy smoke check curls it with no credential — but it does not have to be reachable
+  from the internet, and the difference matters because the response is only harmless while
+  two properties stay right. `application.yml` already sets
+  `management.endpoints.web.exposure.include: health` and
+  `management.endpoint.health.show-details: never` (both verified), which is why this was
+  filed as info rather than a hole. But `show-details: always` is one word and a plausible
+  thing to type while debugging a failing probe, and it turns the same public URL into the
+  Mongo driver's wire version, the JAR's path on disk, and the volume's free space.
+  `SecurityConfig.LOOPBACK_HEALTH` scopes the `permitAll` so that mistake stops being a
+  disclosure — the same two-independent-reasons shape already used for Swagger. Defence in
+  depth on top of "8080 is not publicly reachable", **not** a replacement for it: anyone
+  reaching 8080 directly could spoof `X-Forwarded-For`. `SecurityIT.publicEndpoints` asserts
+  both directions, and was confirmed to fail (`expected:<401> but was:<200>`) with the rule
+  reverted.
+
+**Still open, deliberately not done in this pass:** the SPA's static assets get no response
+security headers. Spring Security sets `nosniff` / `X-Frame-Options: DENY` / HSTS on
+`/api`, `/oauth2` and `/login`, but `index.html` and the JS bundle are served by Nginx and
+get none, so the app is framable. A CSP must allow `fonts.googleapis.com` and
+`fonts.gstatic.com` (`index.html` loads Google Fonts). The vhost says so in a comment.
 
 ---
 

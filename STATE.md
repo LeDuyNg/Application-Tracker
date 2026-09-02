@@ -52,7 +52,7 @@ pointing into merged history. Harmless; delete them whenever.
   - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
-- **102 tests green** (`./mvnw verify`): 26 unit, 76 integration.
+- **103 tests green** (`./mvnw verify`): 26 unit, 77 integration.
 - **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
   proxies `/api`, `/oauth2`, `/login` → `:8080`. `src/api/` = `types.ts` (DTO mirrors),
   `client.ts` (the one `fetch` wrapper: session cookie, `X-XSRF-TOKEN` on mutations,
@@ -66,6 +66,12 @@ pointing into merged history. Harmless; delete them whenever.
   owner has explicitly deferred refining.**
 - **Google login + logout verified in a browser.** The owner signed in with the allowlisted
   account and signed back out. `POST /api/logout` → 204 (`LogoutIT` covers it).
+- **Pre-deploy security pass (2026-09-02).** Full read of backend + frontend for security
+  flaws. Core auth model held up; six changes applied — URL scheme allowlist on
+  `jobPostingUrl` / `website` at both ends (stored-XSS sink), `app.mcp-token` local default
+  removed, `@Valid` moved onto type arguments (HV000271), collection + page-size caps,
+  `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
+  `/actuator/health` narrowed to loopback callers. **103 tests green.** Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
 
 ### Phase 3 loose ends (did not block the merge; pick up before or alongside Phase 4)
 1. **A full dogfooding pass.** Login works; nobody has yet run the whole workflow —
@@ -75,6 +81,13 @@ pointing into merged history. Harmless; delete them whenever.
    iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
    flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
 3. **`npm run preview`** on the built `dist/` — never run (the `build` step itself is green).
+   Also unverified: `deploy/nginx-jobtracker.conf` has never been through `nginx -t` —
+   nginx is not installed on this machine. Run it on the VPS before reloading.
+5. **Static assets have no response security headers.** Spring Security covers `/api`,
+   `/oauth2` and `/login`; `index.html` and the JS bundle come from Nginx and get nothing,
+   so the SPA is framable. Add `X-Frame-Options` / `nosniff` / HSTS (and ideally a CSP
+   allowing `fonts.googleapis.com` + `fonts.gstatic.com`) to the vhost before going
+   public. Called out in a comment at the top of `deploy/nginx-jobtracker.conf`.
 4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
    authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 
