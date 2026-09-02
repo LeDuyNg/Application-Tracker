@@ -57,13 +57,13 @@ path in `CLAUDE.md §5` becomes real.
 - [x] Nothing to point at yet — DNS comes in Phase 4.
 
 ### Oracle Cloud
-- [ ] Create an "Always Free" account (needs a card for identity; not charged for
+- [x] Create an "Always Free" account (needs a card for identity; not charged for
       Always-Free resources).
-- [ ] Create a VM: **`VM.Standard.E2.1.Micro`** (AMD x86), **1/8 OCPU burstable to 1,
+- [x] Create a VM: **`VM.Standard.E2.1.Micro`** (AMD x86), **1/8 OCPU burstable to 1,
       1 GB RAM**, **Ubuntu 24.04 (x86_64)**, ~50 GB boot volume.
       *A1 was the original choice and is unobtainable — see `CLAUDE.md §6`. Always Free
       resources exist only in your home region, so a different region is not a workaround.*
-- [ ] **One instance only.** The Always Free description implies two E2 micros, but this
+- [x] **One instance only.** The Always Free description implies two E2 micros, but this
       tenancy has one usable. Phase 5 is planned around that: no Datadog Agent in
       production, and APM captured locally (`CLAUDE.md §6`).
 - [ ] Expect a slow first boot and slow `apt` operations — 1/8 OCPU baseline. It bursts to a
@@ -76,7 +76,7 @@ path in `CLAUDE.md §5` becomes real.
   - [ ] On the instance: the Ubuntu image ships iptables rules that also block them —
         add `iptables` ACCEPT rules for 80/443 and persist with `netfilter-persistent
         save` (exact commands go in `deploy/RUNBOOK.md` in Phase 4).
-- [ ] Add a **2 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`), and set
+- [ ] Add a **4 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`), and set
       `vm.swappiness=10` in `/etc/sysctl.d/`. On 1 GB this is load-bearing, not a safety
       net — but the heap is sized so the app does not *live* in swap: the boot volume is
       network-attached and steady-state swapping would be painfully slow.
@@ -537,7 +537,8 @@ schema and validation problems, and the app is useless for dogfooding while it's
 - [ ] `apt` install: `openjdk`? no — install **Temurin 25** from the Adoptium apt repo (or
       SDKMAN). `nginx`, `certbot`, `python3-certbot-nginx`, `rclone`,
       `mongodb-database-tools` (for `mongodump`).
-- [ ] Confirm the 2 GB swap file from Phase 0 is active.
+- [ ] Confirm the 4 GB swap file from Phase 0 is active (`free -m`, `swapon --show`) and
+      that `vm.swappiness=10` survived a reboot.
 - [ ] Create service user `jobtracker` (no login shell); dirs `/opt/jobtracker`,
       `/etc/jobtracker`, `/var/www/jobtracker`, `/var/backups/jobtracker`.
 - [ ] Create a **deploy user** for CI with its own SSH key, and give it write access to
@@ -563,10 +564,17 @@ schema and validation problems, and the app is useless for dogfooding while it's
       with nothing left for metaspace, thread stacks, code cache, Nginx and the OS.
       **SerialGC**, which the JVM already picks on a 1-core sub-2 GB machine — don't
       override it (`CLAUDE.md §6`).
+- [ ] Add `MemoryHigh=700M` and `MemoryMax=850M` to `jobtracker.service`. With 4 GB of swap
+      and no cap, a runaway thrashes for a long time and takes SSH down with it; with a cap,
+      the JVM alone dies and `Restart=on-failure` brings it back in seconds. Tune the
+      numbers once you have seen real RSS.
 - [ ] After first deploy, check real usage: `systemctl status jobtracker` for RSS, `free -m`
-      for swap. If the app is sitting in swap at idle, drop `-Xmx` further rather than
-      adding swap. Consider `-XX:TieredStopAtLevel=1` if startup is painfully slow — it
-      trades steady-state throughput for faster warmup, a good deal for one user.
+      for swap, and `vmstat 5` — the **`si`/`so` columns are the ones that matter**. Steady
+      non-zero swap-in/out means the app is living in swap: drop `-Xmx` rather than adding
+      more swap. A large `free -m` swap-used number with `si`/`so` at zero is harmless —
+      that is just cold pages parked, which is exactly what swap is for.
+- [ ] Consider `-XX:TieredStopAtLevel=1` if startup is painfully slow — it trades
+      steady-state throughput for faster warmup, a good deal for one user.
 
 ### Nginx + TLS
 - [ ] `deploy/nginx-jobtracker.conf`: server for `<your-domain>`; `root

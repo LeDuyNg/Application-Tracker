@@ -366,9 +366,18 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   Explicit `-Xmx256m` plus a capped metaspace instead. The collector is **SerialGC**, which
   the JVM already selects on a 1-core sub-2 GB machine — G1 is the wrong choice at this
   size, so the earlier "G1, not ZGC" entry now reads "SerialGC, and let ergonomics pick it".
-- **2 GB swap is load-bearing, not a safety net** — but the app must not live in it. The
-  boot volume is network-attached, so steady-state swapping would be very slow. Size the
-  heap so swap is only ever touched under a spike; set `vm.swappiness=10`.
+- **4 GB swap, with `vm.swappiness=10`.** Cheap on a 50 GB volume and it comfortably
+  covers `apt` operations and spikes. But be clear about what it buys: swap is a **safety
+  margin, not capacity**. It does not make a 1 GB box behave like a 5 GB one; it makes it
+  survive a spike slowly instead of dying. The boot volume is network-attached, so paged-out
+  memory costs milliseconds per access, and a GC that has to page a swapped heap back in can
+  freeze the app for seconds. Size `-Xmx` so the steady state is entirely RAM-resident and
+  swap is only ever touched under a spike.
+- **Cap the service with systemd rather than relying on swap absorbing a runaway.** Set
+  `MemoryHigh` / `MemoryMax` on `jobtracker.service`. With 4 GB of swap and no cap, a leak
+  thrashes for a long time and takes the whole box — including SSH — down with it. With a
+  cap, the JVM alone is killed and `Restart=on-failure` brings it back. A fast restart is a
+  better failure mode than an unreachable host.
 - **The Datadog Agent no longer runs on the app host.** This reverses the "Agent stays
   permanently" part of the student-pack entry above: ~0.5 GB RSS does not fit beside a JVM
   in 1 GB. Custom metrics are unaffected — Micrometer pushes to the Datadog API over HTTPS
@@ -576,7 +585,7 @@ Full steps in `deploy/RUNBOOK.md` (written in Phase 4). Summary:
    Open 80/443 in the VCN
    Security List **and** in the instance's iptables (Ubuntu Oracle images block them by
    default).
-2. Install Temurin 25, Nginx, certbot. Add a 2 GB swap file.
+2. Install Temurin 25, Nginx, certbot. Add a **4 GB swap file** (`vm.swappiness=10`).
 3. `systemd` unit `jobtracker.service` runs
    `java -Xmx256m -XX:MaxMetaspaceSize=128m -Xss512k -jar /opt/jobtracker/app.jar` with
    `EnvironmentFile=/etc/jobtracker/jobtracker.env`. **SerialGC** (the JVM's own choice on a
