@@ -85,6 +85,20 @@
         </dependency>
 
         <!--
+          MockMvc. In Boot 4 this is NOT part of spring-boot-starter-test any more: the web
+          test slices were split into per-technology modules, and @AutoConfigureMockMvc moved
+          from org.springframework.boot.test.autoconfigure.web.servlet to
+          org.springframework.boot.webmvc.test.autoconfigure. Without this dependency the
+          annotation simply does not resolve, and every Boot 3 answer online tells you to use
+          the starter you already have.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
           Testcontainers: real MongoDB for *IT tests, wired via @ServiceConnection.
           Note the artifact names: Testcontainers 2.x renamed the modules from
           `junit-jupiter` / `mongodb` to `testcontainers-junit-jupiter` /

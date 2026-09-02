@@ -56,7 +56,7 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 1 — backend CRUD.** Service layer complete (domain, repositories, DTOs, mappers, all four read features; 62 tests green). Controllers + `GlobalExceptionHandler` are next. |
+| **Current phase** | **Phase 1 — backend CRUD: code complete.** 16 endpoints, RFC 7807 errors, 84 tests green, driven end to end by hand. Only the Atlas-URI check remains, blocked on Phase 0. **Phase 2 (auth) is next, and needs Phase 0's Google client.** |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
@@ -518,6 +518,49 @@ including `StatsServiceIT`, which had been green for days.
 - **Import `org.testcontainers.mongodb.MongoDBContainer`.** Testcontainers 2.x ships *both*
   that and `org.testcontainers.containers.MongoDBContainer`, the 1.x-compatible shim, and
   both compile. Every snippet online uses the old one.
+
+### 2026-09-01 — Controllers, error handling, and the end of Phase 1's code
+
+- **`GlobalExceptionHandler` is a plain `@RestControllerAdvice`, not a subclass of
+  `ResponseEntityExceptionHandler`.** The base class already handles several of these
+  exceptions and quietly wins over any method that does not match the exact signature it
+  expects to override — a subtle way to have a handler that never runs. A plain advice makes
+  the mapping explicit: the list of `@ExceptionHandler` annotations *is* the API's error
+  contract. Every response is RFC 7807 `application/problem+json`; validation failures attach
+  an `errors` array naming every bad field, not just the first.
+- **Jackson's message is passed through on a bad enum value.** For `"source":
+  "CARRIER_PIGEON"` it reads "not one of the values accepted for Enum class: [REFERRAL,
+  COLD_APPLY, ...]" — it names every legal value, which is exactly what a caller needs and
+  what the MCP server will surface. The cost is exposing DTO type names; for a single-user
+  API whose entire schema is published in `SCHEMA.md`, that is not a secret. The "at
+  [Source: ...]" tail is trimmed off, since it helps nobody.
+- **Search returns `PagedModel`, not `Page`.** Serializing a `PageImpl` straight out emits
+  Spring Data's internal structure, which it explicitly warns is not a stable contract and
+  logs a warning about. `PagedModel` is the supported wrapper and gives
+  `{content, page:{size, number, totalElements, totalPages}}` — a shape the SPA's
+  `types.ts` and the MCP client can mirror without being broken by a Spring Data upgrade.
+- **All three stage operations return the whole updated application, not the stage.** A stage
+  mutation also moves `currentStageType`, sometimes `status`, and usually `lastContactAt`.
+  Returning just the stage would leave every caller holding a stale parent and needing a
+  second GET to discover what else changed.
+- **Route ordering is not load-bearing, contrary to appearances.** `/api/applications/
+  followups` and `/interviews` sit where `/{id}` could also match. Spring's
+  `PathPatternParser` scores a literal segment above a variable one regardless of declaration
+  order, so they resolve correctly wherever they appear in the file. Worth knowing because the
+  older `AntPathMatcher` did not, and every "declare the specific route first" answer online
+  is about that. `ApplicationControllerIT` pins it either way.
+- **`days` and `from`/`to` on `/api/stats` stay mutually exclusive at the controller
+  boundary** — the service raises the 400. Verified end to end rather than assumed.
+
+### 2026-09-01 — MockMvc needs its own starter on Boot 4
+
+- **`spring-boot-starter-webmvc-test` must be added explicitly**, and
+  `@AutoConfigureMockMvc` now lives in `org.springframework.boot.webmvc.test.autoconfigure`,
+  not `org.springframework.boot.test.autoconfigure.web.servlet`. Boot 4 split the test slices
+  into per-technology modules, and `spring-boot-starter-test` no longer carries the web one.
+  The failure is a plain "package does not exist", and every Boot 3 answer says to use the
+  starter you already have — so the natural next move is to doubt the import rather than the
+  dependency list. Same family of trap as the Testcontainers 2.x module rename.
 
 ---
 

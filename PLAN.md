@@ -252,8 +252,8 @@ auth yet** (added in Phase 2).
       math (`SCHEMA.md §7`).
 
 ### Controllers (REST)
-- [ ] `CompanyController`: `POST/GET/GET{id}/PUT{id}/DELETE{id} /api/companies`.
-- [ ] `ApplicationController`:
+- [x] `CompanyController`: `POST/GET/GET{id}/PUT{id}/DELETE{id} /api/companies`.
+- [x] `ApplicationController`:
   - `POST /api/applications`, `GET /api/applications/{id}`, `PUT /api/applications/{id}`,
     `DELETE /api/applications/{id}`
   - `GET /api/applications` with `q, status, companyId, from, to, page, size, sort`
@@ -262,13 +262,17 @@ auth yet** (added in Phase 2).
     `DELETE /api/applications/{id}/stages/{stageId}`
   - `GET /api/applications/followups`
   - `GET /api/applications/interviews?days=`
-- [ ] `StatsController`: `GET /api/stats?days=` **and** `?from=&to=`, mutually exclusive
+- [x] `StatsController`: `GET /api/stats?days=` **and** `?from=&to=`, mutually exclusive
       (400 if both). "How many applications this month?" is a *calendar* month, which
       `days=30` cannot express — see `SCHEMA.md §10.1`.
-- [ ] `GlobalExceptionHandler` (`common/`): `@RestControllerAdvice` → RFC 7807
+- [x] `GlobalExceptionHandler` (`common/`): `@RestControllerAdvice` → RFC 7807
       `ProblemDetail`; map `NoSuchElementException`/custom `NotFoundException` → 404,
       `MethodArgumentNotValidException` → 400 with field errors, custom
       `ValidationException` → 400, `IllegalStateException` for the delete-conflict → 409.
+      *(Also covers binding failures — a bad enum in the body, an unconvertible query param —
+      and a logged catch-all so a 500 has the same shape as everything else. Deliberately a
+      plain advice rather than a `ResponseEntityExceptionHandler` subclass; see
+      `CLAUDE.md §6`.)*
 - [x] Date serialization: `spring.jackson.datatype.datetime.write-dates-as-timestamps:
       false` — **not** the Boot 3 key `spring.jackson.serialization.*`, which fails the
       context load on Jackson 3 (`SCHEMA.md §11`).
@@ -282,7 +286,9 @@ auth yet** (added in Phase 2).
       sequence (not the latest), a `WITHDRAWN` application stays `WITHDRAWN` after an
       unrelated stage edit, and `lastContactAt` moves on a stage status change but **not**
       on a notes edit.
-- [ ] `ApplicationControllerIT`: happy path for every endpoint + 404 + 400 cases.
+- [x] `ApplicationControllerIT`: happy path for every endpoint + 404 + 400 cases.
+      Plus `CompanyControllerIT`, which covers the two rules that corrupt data silently when
+      broken: the rename cascade and the 409-on-delete.
 - [x] `StatsServiceIT`: seed ~10 applications across statuses/stages, assert the funnel and
       each rate from `SCHEMA.md §9`.
 - [x] `UpcomingInterviewsIT`, `FollowupsIT`: boundary cases (exactly `days` away, terminal
@@ -291,13 +297,17 @@ auth yet** (added in Phase 2).
       `.*` must match nothing rather than everything.
       *(Adding a second `*IT` class exposed a container-lifecycle bug in `AbstractMongoIT`
       that had been latent while only one existed — `CLAUDE.md §6`.)*
-- [ ] `mvn verify` green.
+- [x] `mvn verify` green — **84 tests** (20 unit, 64 integration across six `*IT` classes).
 
 ### Manual verification
-- [ ] `backend/src/test/http/jobtracker.http` — IntelliJ's **HTTP Client**, run from the
+- [x] `backend/src/test/http/jobtracker.http` — IntelliJ's **HTTP Client**, run from the
       gutter arrows. Exercises the full flow: create company → create application → add
       stages → stats/followups/interviews/search. Committed to git; this is the collection
       re-run against prod in Phase 5 to generate trace traffic. No Postman needed.
+      *(Every request carries a `client.test(...)` assertion, and the whole file was driven
+      against a running instance rather than written and assumed. The error cases at the end
+      are deliberate — without them the Phase 5 traces contain no error spans. See
+      `src/test/http/README.md`.)*
 - [ ] Point `application-local.yml` at the **Atlas** URI once and confirm it works against
       the real cluster; then switch back to local Mongo for fast iteration.
 

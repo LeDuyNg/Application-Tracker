@@ -26,9 +26,9 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 1 (backend CRUD), service layer complete; controllers remain.
-**Branch:** `phase-1-backend-crud`, **pushed** and tracking `origin/phase-1-backend-crud`.
-`main` on the remote is still the docs-only commit — the branch has not been merged.
+**Current phase:** Phase 1 (backend CRUD) — **code complete**. One item blocked on Phase 0.
+**Branch:** `phase-1-backend-crud`, pushed and tracking `origin/phase-1-backend-crud`.
+`main` on the remote is still docs-only — the branch has not been merged.
 
 ### Done and tested
 - Domain layer: 6 enums, `Company`/`Contact`, `Application`/`Stage`/`Compensation`.
@@ -38,30 +38,33 @@ disagree about *what is built*, check the code.
   add/update/delete, and the three denormalization rules).
 - `StatsService` — the `$facet` aggregation plus a second one for average days to first
   response.
-- **`ApplicationQueryService`** — the other three read features: follow-ups (both halves),
-  upcoming interviews, escaped-regex search. Separate from `ApplicationService` on purpose
-  (`CLAUDE.md §6`).
-- **62 tests green** (`./mvnw verify`): 21 unit, 41 integration across four `*IT` classes.
+- `ApplicationQueryService` — follow-ups (both halves), upcoming interviews, escaped-regex
+  search. Separate from `ApplicationService` on purpose (`CLAUDE.md §6`).
+- **Controllers**: `CompanyController`, `ApplicationController`, `StatsController` — 16
+  operations, all listed in the OpenAPI doc. Plus `GlobalExceptionHandler` (RFC 7807).
+- `backend/src/test/http/jobtracker.http` — the full flow with assertions on every request,
+  plus deliberate error cases for the Phase 5 traces.
+- **84 tests green** (`./mvnw verify`): 20 unit, 64 integration across six `*IT` classes.
 
-### Not started (the rest of Phase 1)
-1. **Controllers** — `CompanyController`, `ApplicationController`, `StatsController`, plus
-   `GlobalExceptionHandler` (RFC 7807 `ProblemDetail`; the three exception types in
-   `common/` already exist and just need mapping). The service layer is finished, so these
-   are now genuinely mechanical: each endpoint is a signature over a method that exists.
-   Note `StatsController` must reject `days` together with `from`/`to` with a 400, and
-   `ApplicationController` resolves a `Pageable` — the service supplies `appliedDate desc`
-   when the caller sends no sort.
-2. **`ApplicationControllerIT`** — happy path per endpoint, plus 404 and 400.
-3. **`backend/src/test/http/jobtracker.http`** — IntelliJ HTTP Client collection.
-4. One item is **blocked**: pointing `application-local.yml` at a real Atlas URI, which
-   needs the Atlas cluster from Phase 0.
+### What is left in Phase 1
+Only the **blocked** item: point `application-local.yml` at a real Atlas URI once and confirm
+it works against the real cluster, then switch back to local Mongo. Needs the Atlas M0
+cluster from Phase 0.
 
-**Suggested next step:** the controllers and `GlobalExceptionHandler` together — the handler
-is what turns the exceptions the services already throw into the status codes the ITs assert,
-so writing controllers without it means writing the ITs twice.
+**Suggested next step:** either finish Phase 0 (Atlas, Google OAuth client, Datadog student
+pack — the Datadog one carries the APM-trial-availability check, the only Phase 0 item with
+no recovery path if discovered late), or start **Phase 2 — authentication**, which needs the
+Google client ID/secret and so depends on Phase 0 anyway. Phase 0 is the real unblocker.
 
-### Two things found while building the read queries
-Both are in `CLAUDE.md §6` with full reasoning; repeated here because each was silent.
+### Verified by hand, not just by tests
+The app was run on the `local` profile and driven end to end: company → application → stages
+→ stats / follow-ups / interviews / search, plus every error case. Confirmed live: Swagger
+lists all 16 operations, every error returns `application/problem+json` with the right status,
+partial-word search works (`strip` finds Stripe), `(senior)` does not 500, and `.*` matches
+nothing rather than everything. Startup is ~1.1s with all 9 indexes ensured.
+
+### Three things found while building this phase's back half
+All are in `CLAUDE.md §6` with full reasoning; repeated here because each was silent.
 
 - **`lastContactAt` was never set when an application was created with its `stages[]`
   supplied.** `null` is not `$lte` any date, so those applications could never appear in the
@@ -69,8 +72,9 @@ Both are in `CLAUDE.md §6` with full reasoning; repeated here because each was 
   historical job search would have been invisible to the query it matters most for.
 - **`@Testcontainers` + `@Container` stops the container when a test *class* finishes.**
   Latent while only `StatsServiceIT` existed; adding a second `*IT` broke every class after
-  the first, `StatsServiceIT` included, with `Connection refused`. `AbstractMongoIT` now
-  starts the container in a static initializer instead.
+  the first, `StatsServiceIT` included, with `Connection refused`.
+- **MockMvc needs `spring-boot-starter-webmvc-test` on Boot 4**, and `@AutoConfigureMockMvc`
+  moved package. `spring-boot-starter-test` no longer carries the web slice.
 
 ---
 
@@ -112,6 +116,7 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | Datadog registry | Auto-configures on classpath presence and demands an API key. Must stay `enabled: false` by default or every `@SpringBootTest` fails. |
 | Testcontainers 2.x | Modules renamed: `testcontainers-junit-jupiter`, `testcontainers-mongodb`. The Boot parent does not manage their versions — the BOM is imported explicitly. |
 | springdoc | Needs the **3.x** line for Boot 4. 2.x targets Boot 3 and will not work. |
+| MockMvc on Boot 4 | Needs **`spring-boot-starter-webmvc-test`** — `spring-boot-starter-test` no longer carries the web slice — and `@AutoConfigureMockMvc` moved to `org.springframework.boot.webmvc.test.autoconfigure`. Fails as "package does not exist". |
 | `@Testcontainers` + `@Container` | Ties the container to a **test class** — it is stopped when that class ends, so every later `*IT` gets `Connection refused` against a cached port. Start it in a static initializer. |
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |
 | `null` in a `$lte` query | `null` is not `$lte` anything, so a document with a null field silently drops out of a range query. Load-bearing for `followUpDate` (wanted) and `lastContactAt` (a bug until it was seeded on create). |

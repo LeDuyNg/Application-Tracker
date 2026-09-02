@@ -41,6 +41,10 @@ npm-debug.log*
 !.env.example
 !*.env.example
 
+# IntelliJ HTTP Client. The private env file is where the Phase 2 bearer token will live.
+# The *.env rules above do NOT match it — the filename ends in .json.
+http-client.private.env.json
+
 # Key material. The Phase 4 CI deploy key and any TLS/keystore file must never land here.
 *.pem
 *.key
