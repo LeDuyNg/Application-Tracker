@@ -703,19 +703,23 @@ sudo -u deploy sudo -n -l /usr/bin/systemctl restart jobtracker
 `SSH_KNOWN_HOSTS` is not in `PLAN.md`'s list but you want it — the alternative is
 `StrictHostKeyChecking=no`, which turns off exactly the check that would catch a MITM.
 
-The two workflow files (`.github/workflows/backend.yml`, `frontend.yml`) still need writing.
-Shape, per `PLAN.md`:
+**The workflows are written** — `.github/workflows/backend.yml` and `frontend.yml`. Both
+trigger on push to `main` filtered by path, so a CSS change does not restart the JVM, and
+both carry `workflow_dispatch` so you can re-run a deploy without an empty commit.
 
-- **backend.yml**, on push to `main` touching `backend/**`: `mvn -B verify` (Testcontainers
-  works on GitHub runners, and this already produces the JAR — do **not** follow it with a
-  second `package -DskipTests`) → `scp` to `/opt/jobtracker/app-<sha>.jar` → repoint the
-  `app.jar` symlink → prune to the last 3 → `ssh sudo systemctl restart jobtracker` → poll
-  `/actuator/health` on loopback until `UP`, with a timeout.
-- **frontend.yml**, on push to `main` touching `frontend/**`: `npm ci` → `npm run build` →
-  `rsync --delete dist/` to `/var/www/jobtracker`.
+Three things in them worth knowing rather than discovering:
 
-Keep the last 3 JARs: with no Docker there is no image-tag rollback, and those symlink
-targets are the rollback (`CLAUDE.md §6`).
+- **The health check runs on the box, over ssh — not from the runner.** `/actuator/health`
+  is permitted on loopback only (`SecurityConfig.LOOPBACK_HEALTH`) and Nginx does not proxy
+  `/actuator`, so a runner curling the public URL would get a 401 and fail every deploy. It
+  polls for up to 180s because the app takes ~40s to boot on a 1/8-OCPU host.
+- **`concurrency` queues deploys rather than cancelling them.** Two overlapping runs would
+  race on the `app.jar` symlink and the restart; cancelling one mid-restart is worse than
+  making it wait.
+- **The last three JARs are kept.** With no Docker there is no image tag to roll back to, so
+  those files and the symlink *are* the rollback (`CLAUDE.md §6`).
+
+Deploys only fire from `main`. While you are on `phase-4-deploy` nothing runs — merge first.
 
 ---
 

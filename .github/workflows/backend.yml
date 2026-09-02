@@ -1,0 +1,94 @@
+name: backend
+
+# Only on backend changes. The frontend has its own workflow so a CSS tweak does not
+# rebuild the JVM and restart the API.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:        # lets you re-run a deploy without an empty commit
+
+permissions:
+  contents: read            # least privilege: this workflow only reads the repo
+
+# Two deploys overlapping would race on the app.jar symlink and the restart. Queue them
+# instead, and do not cancel a run that may already be mid-restart on the server.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: maven
+
+      # `verify` runs Surefire (*Test) AND Failsafe (*IT). The ITs need Docker for
+      # Testcontainers, which ubuntu-latest runners provide. This step also produces the
+      # JAR — do NOT follow it with `package -DskipTests`, which would rebuild from
+      # scratch for nothing.
+      - name: Build and test
+        run: ./mvnw -B verify
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Pinning the host key rather than StrictHostKeyChecking=no, which would switch
+          # off the one check that would notice a machine-in-the-middle.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # Named by commit SHA so every deploy is identifiable and rollback is a symlink
+      # change. With no Docker on the box there is no image tag to roll back to; these
+      # files are the rollback (CLAUDE.md §6).
+      - name: Upload JAR
+        run: |
+          JAR=$(ls target/jobtracker-*.jar | head -1)
+          scp -i ~/.ssh/id_deploy "$JAR" \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/jobtracker/app-${GITHUB_SHA}.jar"
+
+      - name: Activate and restart
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "set -euo pipefail
+             cd /opt/jobtracker
+             ln -sfn app-${GITHUB_SHA}.jar app.jar
+             # Keep the three newest; -t is newest-first, so drop everything past the third.
+             ls -1t app-*.jar | tail -n +4 | xargs -r rm -f
+             sudo systemctl restart jobtracker"
+
+      # The deploy is not done when systemd returns — that only means the process started.
+      # /actuator/health is permitted on loopback ONLY (SecurityConfig.LOOPBACK_HEALTH) and
+      # Nginx does not proxy /actuator, so this has to be curled ON the box, not from here.
+      # The app takes ~40s to boot on a 1/8-OCPU host, hence the generous window.
+      - name: Wait for health
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            'for i in $(seq 1 36); do
+               if curl -sf localhost:8080/actuator/health | grep -q "\"status\":\"UP\""; then
+                 echo "healthy after $((i*5))s"; exit 0
+               fi
+               sleep 5
+             done
+             echo "still not healthy after 180s — check: journalctl -u jobtracker -n 100"
+             exit 1'
