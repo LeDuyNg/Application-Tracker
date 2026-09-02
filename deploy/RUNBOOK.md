@@ -523,6 +523,24 @@ start with an error that says nothing about permissions.
 If it will not start, `journalctl -u jobtracker -n 100` is the answer. The usual causes are
 in Step 5.
 
+To test the database credentials on their own, without starting the app:
+
+```bash
+URI=$(sudo sed -n 's/^MONGODB_URI=//p' /etc/jobtracker/jobtracker.env)
+mongodump --uri "$URI" --collection __probe__ --archive=/dev/null && echo AUTH_OK
+```
+
+**Do not test it by sourcing the env file in a shell** — `set -a; . /etc/jobtracker/jobtracker.env`
+looks right and quietly lies. A systemd `EnvironmentFile` is not a shell script, and the URI
+contains `&` (from `&w=majority&appName=…`), which bash reads as "run in background": the
+assignment is truncated at the first `&` and discarded. `$MONGODB_URI` then comes out empty,
+`mongodump` falls back to its `localhost:27017` default, and you get a connection-refused
+error against your own machine that has nothing to do with the problem you were chasing.
+systemd's parser has no such behaviour, so the app sees the full value either way.
+
+The `sed` form above avoids it because command substitution captures the line literally and
+`"$URI"` is quoted at the point of use.
+
 ---
 
 ## Step 8 — Nginx + TLS
