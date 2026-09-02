@@ -26,14 +26,15 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** **Phase 5 — Datadog.** Phases 1–4 are done and merged; Phase 3's
-dogfooding bar was met on 2026-09-02 with three real applications entered through the live
-UI. Branch: `phase-5-datadog`.
+**Current phase:** **Phase 6 — MCP server.** Phases 1–5 are done and merged. The app is
+live at `https://app4jobtrack.me`, auto-deploying from `main`, with metrics, a dashboard and
+an error-rate monitor in Datadog (**us5**). Next branch: `phase-6-mcp`.
 
-Phase 5 is **metrics, a dashboard and one alert** — there is no APM and no Agent anywhere,
-which is a decision (`CLAUDE.md §6`, §14), not a gap. The work is: domain counters through
-Micrometer, a `MeterFilter` to stay inside the ~100-timeseries budget, a dashboard with 3+
-widgets, and an error-rate monitor that gets test-fired. Nothing is on a clock.
+*Phase 5, closed 2026-09-02:* three domain counters
+(`jobtracker.applications.created`, `.stages.added` by `stage_type`, `.api.errors` by
+`status`), an **allowlist** `MeterFilter` holding the ~100-timeseries budget, the dashboard,
+and the error-rate monitor. No APM and no Agent anywhere — a decision (`CLAUDE.md §6`, §14),
+not a gap.
 
 *Phase 4:* **Deploy. Done. The app is live at `https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0,
 and both GitHub Actions workflows deploying from `main`. Health `UP`, Datadog metrics
@@ -67,7 +68,7 @@ pointing into merged history. Harmless; delete them whenever.
   - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
-- **103 tests green** (`./mvnw verify`): 25 unit, 78 integration. Verified with the local
+- **112 tests green** (`./mvnw verify`): 25 unit, 87 integration. Verified with the local
   `jt-mongo` container **stopped** — see the ambient-Mongo trap in §4; a green run with it
   running proves less than it appears to.
 - **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
@@ -100,6 +101,13 @@ pointing into merged history. Harmless; delete them whenever.
   **over ssh on the box** — the endpoint is loopback-only, so a runner curling the public
   URL would 401 and fail every deploy.
 - **Datadog metrics reaching the platform**, agentless via Micrometer, on site **US5**.
+- **Phase 5 — Datadog.** `config/MetricsConfig` is an **allowlist**, not a blocklist: Boot's
+  default binders exceed the ~100 custom-timeseries budget on an idle app, and a blocklist
+  would let the next dependency shipping a Micrometer binder spend that budget without a
+  decision. Three domain counters, all deliberately low-cardinality — the stage tag is a
+  closed enum, the error tag is a status code rather than an exception class name.
+  `MetricsIT` asserts **deltas, never absolute counts**, because meters are monotonic and the
+  IT context is shared. Dashboard and error-rate monitor built in the console.
 - **Pre-deploy security pass (2026-09-02).** Full read of backend + frontend for security
   flaws. Core auth model held up; six changes applied — URL scheme allowlist on
   `jobPostingUrl` / `website` at both ends (stored-XSS sink), `app.mcp-token` local default
@@ -109,6 +117,11 @@ pointing into merged history. Harmless; delete them whenever.
 
 ### Open
 
+0. **Check the real custom-metric series count** — Datadog → *Plan &amp; Usage → Custom
+   Metrics* — after a day of traffic. `MetricsConfig`'s budget table is arithmetic; that page
+   is truth, and a series only exists once its tag combination has occurred, so checking
+   early under-reports. Lever if it is near 100: `ALLOWED_THIRD_PARTY`, dropping
+   `jvm.memory.used` (~16 series) first.
 1. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Three applications entered
    through the live UI at `https://app4jobtrack.me`, chosen to differ in status so the
    funnel, follow-ups and filters had signal. Nothing broke. **This closes Phase 3** —

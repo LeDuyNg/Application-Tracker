@@ -46,7 +46,9 @@ Four deliverables, all built around one data store:
 > MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
 > natural-language queries over application status and interview stages via Claude Desktop.
 
-*(Says "metrics, dashboards and alerting", not "APM", and that is the whole claim — there
+*(**Every word of this is now true rather than planned**, as of 2026-09-02: the metrics,
+the dashboard and the error-rate monitor all exist against the deployed instance. It says
+"metrics, dashboards and alerting", not "APM", and that is the whole claim — there
 is no tracing in this project, locally or in production (§6, 2026-09-02). The bullet was
 written this way before that was forced, which is why it needed no edit when it was.
 "Why no APM?" has a real answer worth giving in an interview: a 1 GB host, an Agent needing
@@ -59,7 +61,7 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 5 — Datadog** (branch `phase-5-datadog`). Phases 1–4 done and merged; live at `https://app4jobtrack.me`, auto-deploying from `main`. Phase 3's dogfooding bar was met 2026-09-02 with three real applications. Phase 5 is metrics + dashboard + one alert — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
+| **Current phase** | **Phase 6 — MCP server** (next branch `phase-6-mcp`). Phases 1–5 done and merged. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
@@ -1042,6 +1044,55 @@ the logout tests in their own class. That was the right instinct applied to the 
 the trigger was identified, the mechanism was not, and the workaround left the test one
 alphabetical accident from failing. Recorded because "we noticed it was flaky and moved things
 around" is how a real bug survives.
+
+### 2026-09-02 — Phase 5: metrics, a dashboard, an alert
+
+Closed the same day it opened, because dropping APM had already removed most of what made
+this phase big. What remains is the part that was always the interesting half.
+
+- **The `MeterFilter` is an allowlist, not the blocklist `PLAN.md` specified.** That plan
+  said to filter `http.server.requests` down and stay under ~100 custom timeseries. Filtering
+  that one metric is not enough: Boot's default binders — `jvm.gc.*`, `jvm.threads.states`,
+  `tomcat.*`, `logback.events`, the Mongo driver's pool listeners — exceed the budget on a
+  completely idle application, without anyone choosing to spend it. And nothing warns you;
+  Datadog either bills the overage or caps and metrics quietly stop arriving. A blocklist also
+  means the next dependency that ships a Micrometer binder enlarges the bill silently, whereas
+  an allowlist makes a new metric arrive only when someone types its name into
+  `MetricsConfig`. That is the decision point worth having.
+- **The dropped metric was already predicted to be undroppable.** `PLAN.md` listed
+  `jobtracker.api.request.duration` while noting it "will not arrive under that name".
+  Correct — Actuator's timer is `http.server.requests`, and renaming it buys nothing.
+  Keeping it with its templated `uri` tag answers "which endpoint is slow", which is the one
+  question APM would have answered and a large part of why §14's non-goal costs less than it
+  sounds.
+- **`outcome` and `exception` are stripped.** `outcome` is derivable from `status`;
+  `exception` is a class name, so its value set grows with the codebase. A tag bounded only
+  by "how many exception types exist" is the exact shape that consumes a fixed budget without
+  anyone noticing. Error counts survive as `jobtracker.api.errors`, tagged by status, from
+  `GlobalExceptionHandler.problem()` — the single place every error response is built.
+- **No percentiles, and that is a budget decision rather than an oversight.** Micrometer
+  publishes none unless `management.metrics.distribution.percentiles` is set, and enabling
+  them across `uri × method × status` costs roughly 90 series against an allowance of 100.
+  The registry's `max` per `uri` isolates `/api/stats` perfectly well, and unlike an average
+  a single slow aggregation is not washed out by a hundred fast reads. Percentiles scoped to
+  that one endpoint stay available if the need ever appears.
+- **A stage counter that counted almost nothing.** `jobtracker.stages.added` was wired into
+  `addStage()` only — but `create()` makes stages by both of its branches, the seeded
+  `APPLICATION_SUBMITTED` and a caller-supplied list. Every application undercounted by one,
+  and a backfilled application arriving with four stages counted zero. **Found by the
+  dashboard widget reading "no data"**, not by a test. This is the third time this exact
+  shape has bitten: a rule attached to one branch of `create()` while the other does the same
+  work silently — see the `lastContactAt` entry from 2026-09-01. The fix is the same
+  shape too: one `countStages()` helper, called from both, with a javadoc naming its callers.
+- **`MetricsIT` asserts deltas, never absolute counts.** Meters are monotonic and the IT
+  context is shared, so `isEqualTo(1)` would pass or fail on Maven's `runOrder` — the failure
+  that had already cost a CI-only red build hours earlier. Reading before and after is immune
+  to it, and costs nothing.
+
+**§1's resume bullet is now true rather than aspirational.** "Datadog metrics, dashboards and
+alerting" describes things that exist against the deployed instance. It needed no edit when
+APM was dropped, because it never claimed APM — which is what the 2026-09-01 narrowing was
+for.
 
 ---
 

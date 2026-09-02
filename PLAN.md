@@ -732,7 +732,7 @@ confirmed in Phase 0.
 > never needed an Agent.
 
 ### Custom metrics (permanent)
-- [ ] Configure the Micrometer Datadog registry in `application-prod.yml`:
+- [x] Configure the Micrometer Datadog registry in `application-prod.yml`:
       `management.datadog.metrics.export.api-key=${DD_API_KEY}`,
       `...uri=https://api.${DD_SITE}`, a sensible `step` (e.g. 30s).
 - [x] Custom metrics:
@@ -758,9 +758,14 @@ confirmed in Phase 0.
     means the next dependency that ships a binder quietly enlarges the bill. `MetricsIT`
     probes the filter directly rather than asserting on whichever binders happen to be
     present.
-- [ ] Redeploy; confirm metrics appear in Datadog Metrics Explorer, and check
-      *Plan & Usage → Custom Metrics* for the actual series count once traffic has run for
-      a day.
+- [x] Redeploy; confirm metrics appear in Datadog Metrics Explorer. **Site is `us5`, not
+      `datadoghq.com`** — a key is valid only on its own site and a mismatch is rejected with
+      no error the app surfaces and no data in the UI (`CLAUDE.md §6`, `STATE.md §4`).
+- [ ] **Still open, and time-gated:** check *Plan &amp; Usage → Custom Metrics* for the real
+      series count once traffic has run for **a day**. The budget table in `MetricsConfig` is
+      arithmetic; that page is truth. A series only exists once its tag combination has
+      occurred, so checking early under-reports. If it is near 100, `ALLOWED_THIRD_PARTY` is
+      the lever and `jvm.memory.used` (~16 series) is the first thing to drop.
 
 ### Datadog Agent — nowhere in production
 
@@ -769,10 +774,10 @@ already carrying a JVM at ~500 MB plus Nginx and the OS. There is nowhere to put
 (`CLAUDE.md §6`). Custom metrics are unaffected — Micrometer pushes straight to the Datadog
 API over HTTPS and never needed an agent.
 
-- [ ] Do **not** `apt install datadog-agent` on the VPS. If you try it anyway, the box will
+- [x] Do **not** `apt install datadog-agent` on the VPS. If you try it anyway, the box will
       swap continuously on network-attached storage and the app will be visibly slow — you
       would be breaking the running app to produce a screenshot.
-- [ ] Accept the one loss: **no host infra metrics** (CPU/memory/disk) for the app box in
+- [x] Accept the one loss: **no host infra metrics** (CPU/memory/disk) for the app box in
       Datadog. The dashboard is built from application metrics instead, which is the more
       interesting half anyway.
 
@@ -787,19 +792,29 @@ If distributed tracing is ever wanted, OpenTelemetry to a local Jaeger/Tempo con
 the route — not this.
 
 ### Dashboard + alert
-- [ ] Dashboard "Job Tracker — API" with ≥ 3 widgets: request latency (p50/p95/p99),
-      error rate, applications-created over time, (bonus) requests by endpoint, JVM
-      heap.
-- [ ] Monitor: **API error rate > 5% over 5 minutes** → notify (email). Note in the
+- [x] Dashboard "Job Tracker — API". **Not p50/p95/p99** — Micrometer publishes no
+      percentiles unless `management.metrics.distribution.percentiles` is set, and enabling
+      them across `uri × method × status` would cost ~90 series against a 100 budget. The
+      registry gives `count`, `avg`, `max` per timer, and **`max` by `uri`** is the widget
+      that matters: it isolates `/api/stats` without one slow aggregation being averaged
+      away. Percentiles scoped to that single endpoint remain available if ever wanted.
+- [x] Monitor: **API error rate > 5% over 5 minutes** → notify (email). Note in the
       dashboard description what the threshold is based on and that it needs validation
       against real traffic (interview talking point).
-- [ ] Screenshot the dashboard for the README, labelled as the deployed instance.
+- [ ] Screenshot the dashboard for the README — Phase 7 work, and worth leaving until
+      there is more than a few days of data behind it. Label it as the deployed instance and
+      say what is absent and why (no APM, no host infra metrics).
 
 **Done when:** custom metrics from the deployed instance are visible in Datadog; the
 dashboard is built from those metrics; the error-rate monitor exists and has been
 test-fired (temporarily lower the threshold or generate errors to see it alert); the
 custom-metric series count is comfortably under 100. No wind-down step: nothing here is on
 a clock, because nothing here is a trial.
+
+**Status (2026-09-02): complete.** Three domain counters and an allowlist `MeterFilter`
+shipped and deployed; metrics arriving on **us5**; dashboard and error-rate monitor built in
+the Datadog console. The series-count check above is the one item left, and it is left
+deliberately — it needs a day of traffic to mean anything.
 
 **Gotchas:**
 - **Do not be tempted to put the Agent on the VPS "just for an hour"** to get host infra
