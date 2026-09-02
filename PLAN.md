@@ -1,13 +1,16 @@
 # PLAN.md — Build plan
 
-Phased plan for the Job Application Tracker. Read `CLAUDE.md` for stack, architecture, and
-the decision log; read `SCHEMA.md` for the data model.
+Phased plan for the Job Application Tracker. Read `STATE.md` for where the work currently
+stands; `CLAUDE.md` for stack, architecture, and the decision log; `SCHEMA.md` for the data
+model.
 
 **How to use this file:** work top to bottom. Each phase has an objective, prerequisites, a
 task checklist, a "done when" bar, and gotchas. Check boxes off as you go. Phases 3
 (frontend) and 6 (MCP) include extra explanation because they're new ground for the owner.
 
-**Progress marker:** update `CLAUDE.md §2` at the end of each session.
+**Progress marker:** at the end of each session, tick the boxes here and update
+**`STATE.md`** (and `CLAUDE.md §2` if the phase changed). `STATE.md` is what a fresh
+session reads to pick up the thread.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done
 
@@ -889,6 +892,8 @@ point with specifics from your own usage.
 - [ ] `mvn verify` stays green on `main`.
 - [ ] Every endpoint has at least one integration test (happy path + primary failure).
 - [ ] `SCHEMA.md` and the code agree — reconcile immediately on any drift.
+- [ ] `STATE.md` is updated at the end of each session — branch, what is built, what is
+      next, and any new trap worth not rediscovering.
 - [ ] `CLAUDE.md §2` reflects the current phase at the end of each session.
 - [ ] Commit messages end with the `Claude-Session:` trailer carrying **the current
       session's URL** — a new one each session, not one URL copied forever

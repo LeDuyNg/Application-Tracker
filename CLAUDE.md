@@ -1,8 +1,10 @@
 # CLAUDE.md — Job Application Tracker
 
-> **Read this first in every new session.** This file is the source of truth for the
-> project: what it is, the stack, the architecture, every decision made and why, the
-> conventions to follow, and where the detail lives (`PLAN.md`, `SCHEMA.md`).
+> **Read `STATE.md` first, then this file.** `STATE.md` says where the work actually
+> stands, what is running on the machine, and what to do next; it changes every session.
+> This file is the source of truth for the project: what it is, the stack, the
+> architecture, every decision made and why, the conventions to follow, and where the
+> detail lives (`STATE.md`, `PLAN.md`, `SCHEMA.md`).
 >
 > Keep this file current. When a decision changes, update **§6 Decision log** with a new
 > dated entry — do not silently rewrite history.
@@ -56,6 +58,7 @@ survive a follow-up question.)*
 |---|---|
 | **Current phase** | **Phase 1 — backend CRUD.** Project setup done (scaffold builds, `mvn verify` green); domain layer is the next task. |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
+| **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
@@ -168,6 +171,7 @@ Update this table at the end of every working session.
 
 ```
 Application-Tracker/
+├── STATE.md                   ← session handoff: where the work stands, read this first
 ├── CLAUDE.md                  ← this file (source of truth)
 ├── PLAN.md                    ← phased build plan + checklists
 ├── SCHEMA.md                  ← full data model

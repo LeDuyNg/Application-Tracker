@@ -5,7 +5,7 @@ Two collections: **`companies`** and **`applications`**.
 `stages[]` is embedded inside each application document.
 
 This file is the authoritative data model. If code and this file disagree, one of them is a
-bug — fix the mismatch, don't let it stand.
+bug — fix the mismatch, don't let it stand. (`STATE.md` says how much of it is built.)
 
 ---
 
