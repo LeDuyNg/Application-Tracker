@@ -36,11 +36,14 @@ The session expires. When writes start returning 401, sign in again and re-copy.
 
 ## Why this file earns its keep
 
-1. **Phase 4 backfill.** `backfill.http` will follow the same shape to enter the job search
-   already in progress.
-2. **Phase 5 APM traffic.** Re-running this against a local instrumented run generates the
-   traces to screenshot — which is why the error cases at the bottom matter: without them the
-   traces have no error spans.
+1. ~~**Phase 4 backfill.**~~ Superseded — the job search already in progress was entered
+   through the live UI instead, which doubled as the dogfooding pass. No `backfill.http` was
+   written.
+2. ~~**Phase 5 APM traffic.**~~ Superseded — **tracing was dropped from the project**
+   (`CLAUDE.md §6`, 2026-09-02, and §14): APM is a separately-billed SKU with no trial
+   offerable on the student Pro plan. The error cases at the bottom still earn their keep,
+   though, for a different reason than originally written: they are what makes the Phase 5
+   **error-rate monitor** test-fireable.
 3. **It is executable documentation of the security model.** The boundary section asserts
    that an unauthenticated call is 401 JSON rather than a redirect, and that a valid MCP
    token attempting a write is 403.

@@ -46,8 +46,9 @@ Four deliverables, all built around one data store:
 > MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
 > natural-language queries over application status and interview stages via Claude Desktop.
 
-*(**Every word of this is now true rather than planned**, as of 2026-09-02: the metrics,
-the dashboard and the error-rate monitor all exist against the deployed instance. It says
+*(**Every word of this is true and shipped**, as of 2026-09-02: the metrics, the dashboard
+and the error-rate monitor all exist against the deployed instance, and the MCP server is
+running in Claude Desktop against the live API with a transcript in `README.md`. It says
 "metrics, dashboards and alerting", not "APM", and that is the whole claim — there
 is no tracing in this project, locally or in production (§6, 2026-09-02). The bullet was
 written this way before that was forced, which is why it needed no edit when it was.
@@ -61,14 +62,14 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 7 — README & polish.** `README.md` is written and awaiting captured screenshots/transcripts (`docs/CAPTURE.md`). Phases 1–6 done and merged; Phase 6's server is live in Claude Desktop, with the four example queries and their transcripts still to be run. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
+| **Current phase** | **Phase 7 — README & polish.** `README.md` is written, illustrated and pushed, with a real MCP transcript. **Phases 1–6 are done and merged**; `main` is in sync with the remote. Left in Phase 7: interview-prep notes, a `SCHEMA.md`-vs-code reconciliation pass, an optional Datadog re-shoot, and the final polish sweep. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | **`https://app4jobtrack.me`** — live since 2026-09-02. Deploy record: `deploy/RUNBOOK.md`. |
 | **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–6, each merged `--no-ff` so every phase boundary is a commit. Working on `main`. |
-| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
+| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). The MCP server is separate and talks to the *deployed* API — see §9. |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
 
@@ -180,8 +181,12 @@ Application-Tracker/
 ├── CLAUDE.md                  ← this file (source of truth)
 ├── PLAN.md                    ← phased build plan + checklists
 ├── SCHEMA.md                  ← full data model
-├── README.md                  ← written in Phase 7 (public-facing)
+├── README.md                  ← public-facing: what/why, architecture, decisions, screenshots
 ├── .gitignore
+│
+├── docs/
+│   ├── CAPTURE.md             ← how to (re)capture the README's screenshots + transcripts
+│   └── images/                ← dashboard.png, datadog-dashboard.png
 │
 ├── backend/                   ← Spring Boot + Maven, single module
 │   ├── pom.xml
@@ -1166,6 +1171,37 @@ Deliberately **not** fixed here: it is a data-modelling question — is a stage 
 over it in the presentation layer would be the same "confidently wrong" failure this project
 keeps designing against, only hidden better. Recorded as an open item in `STATE.md`.
 
+### 2026-09-02 — Phase 7: the README
+
+Written for the audience that arrives from a resume link, which is a different reader from
+the one the other four documents serve.
+
+- **The numbers in it were measured, not copied from these docs.** 17 endpoints, 57 Java
+  files, 112 tests. That last one mattered: `STATE.md` had been carrying **both 112 and 103**
+  in different sections for days, and neither was obviously the stale one. An actual
+  `./mvnw clean verify` — with `jt-mongo` stopped, per the ambient-Mongo trap — settled it at
+  112 (25 unit, 87 integration). A README is the one document a stranger checks against
+  reality, so a number in it should come from a command, not from another document.
+- **It says the live link will not let a visitor in.** The app is single-user behind an email
+  allowlist, so anyone clicking through lands on the landing page. Unstated, a working
+  deployment reads as broken to precisely the audience the link exists for. This was not in
+  `PLAN.md`'s outline.
+- **The observability section leads with what is deliberately absent** — no APM, no Agent,
+  and the ~100-timeseries budget that forced the `MeterFilter` to be an allowlist. Constraints
+  reasoned through with numbers attached are stronger material than an unqualified claim,
+  and they pre-empt the obvious follow-up question rather than inviting it.
+- **The MCP transcript was edited for plumbing, not for content.** The raw capture carried the
+  *client's* tool-discovery lines (`query: select:mcp__job-tracker__…`), which implied the
+  tools are named `mcp__job-tracker__*` when they are not. Those were stripped; every word the
+  model wrote is verbatim, and the one exchange whose arguments were not captured says "two
+  calls" rather than inventing them.
+- **The weakest-looking exchange was kept and promoted.** "How many applications this month?"
+  returns **0**, which is an unlucky opener for a portfolio. But the model then offers a
+  rolling window, the next question takes it up, and the pair demonstrates the
+  calendar-vs-rolling rule the tool descriptions exist to force — a rolling `days=30` alone
+  would have answered "3", which is wrong and would have looked right. Reordering to bury the
+  zero would have destroyed the best evidence in the capture.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
@@ -1256,8 +1292,8 @@ Spring profiles:
 
 ## 9. Local development
 
-> Commands assume you're in the repo root. Fill in once the projects are scaffolded
-> (Phases 1/3/6).
+> Commands assume you're in the repo root. All three projects are scaffolded and these
+> commands are the real ones.
 
 ```bash
 # Backend (needs a local MongoDB running, or rely on tests only)
@@ -1273,12 +1309,17 @@ npm install
 npm run dev                                                  # http://localhost:5173 (proxies /api → :8080)
 npm run build                                                # outputs dist/
 
-# MCP server
+# MCP server (needs mcp-server/.env — see .env.example)
 cd mcp-server
 npm install
-npm run dev                                                  # runs with tsx over stdio
-npx @modelcontextprotocol/inspector npm run dev              # interactive tool testing
+npm run build                                                # tsc -> dist/
+npm run dev                                                  # stdio server from src/ via tsx
+npm run inspect                                              # MCP Inspector, manual tool testing
 ```
+
+Claude Desktop runs the **built** `dist/index.js`, not `tsx` — so after changing MCP server
+code, `npm run build` and then fully quit and reopen Desktop (⌘Q, not just the window).
+Changing job-search *data* needs neither: the tools read live on every call.
 
 A local MongoDB for manual backend runs:
 ```bash

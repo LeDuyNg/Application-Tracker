@@ -26,15 +26,17 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** **Phase 7 — README & polish.** `README.md` is written and complete except
-for five asset slots — two screenshots and three MCP transcripts — with `docs/CAPTURE.md`
-giving the exact capture instructions. **Phase 6 is merged** (`phase-6-mcp`, `--no-ff`); the
-MCP server is connected in Claude Desktop and answering, but the four example queries have
-not been run there and no transcripts are saved, so Phase 6 is functionally complete rather
-than closed. The app is live at `https://app4jobtrack.me`, auto-deploying from `main`, with
-metrics, a dashboard and an error-rate monitor in Datadog (**us5**).
+**Current phase:** **Phase 7 — README & polish.** `README.md` is **written, illustrated and
+pushed** — both screenshots in, and a four-exchange MCP transcript captured from Claude
+Desktop. **Phase 6 is done and merged** (`phase-6-mcp`, `--no-ff`): the server is connected in
+Claude Desktop, the example queries have been run, and the transcripts are in the README. The
+app is live at `https://app4jobtrack.me`, auto-deploying from `main`, with metrics, a
+dashboard and an error-rate monitor in Datadog (**us5**).
 
-**`main` is not pushed.** The Phase 6 merge and the README commit are local only.
+**`main` is pushed and in sync with `origin/main`.** All phase branches are on the remote.
+
+Remaining in Phase 7: the interview-prep notes, a `SCHEMA.md`-versus-code reconciliation pass,
+one optional Datadog re-shoot (`docs/CAPTURE.md §2`), and the final polish sweep.
 
 *Phase 5, closed 2026-09-02:* three domain counters
 (`jobtracker.applications.created`, `.stages.added` by `stage_type`, `.api.errors` by
@@ -120,7 +122,7 @@ pointing into merged history. Harmless; delete them whenever.
   removed, `@Valid` moved onto type arguments (HV000271), collection + page-size caps,
   `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
   `/actuator/health` narrowed to loopback callers. **103 tests green at the time** (112 as of 2026-09-02, after Phase 5 and 6 — re-verified with `jt-mongo` stopped: 25 unit, 87 integration). Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
-- **Phase 6 — MCP server (built, not yet driven from Claude Desktop).** `mcp-server/` on
+- **Phase 6 — MCP server. Done.** `mcp-server/` on
   the MCP SDK 1.30 over stdio, TypeScript 6 + zod 4 (matching `frontend/`). Four read-only
   tools — `get_application_stats`, `list_pending_followups`, `search_applications`,
   `get_upcoming_interviews` — each one endpoint, returning text rather than JSON because
@@ -132,14 +134,30 @@ pointing into merged history. Harmless; delete them whenever.
   nothing. `claude_desktop_config.json` is written (previous version backed up beside it)
   and its exact command verified under `PATH=/usr/bin:/bin` from `/` — which shows the
   absolute path is robust, but does **not** show a bare `"node"` would fail; see the
-  `command` row in §4.
+  `command` row in §4. **Driven from Claude Desktop itself**: all four example queries run,
+  and the transcript is in `README.md` under "A real session".
+- **Phase 7 — README (the main deliverable).** `README.md` at the repo root: what/why, live
+  URL, architecture, stack, data model, observability, the MCP layer with a real transcript,
+  local setup, deployment, decisions, and non-goals. Numbers in it were **measured, not
+  copied** — 17 endpoints, 57 Java files, 112 tests from an actual `verify` run with
+  `jt-mongo` stopped. `docs/CAPTURE.md` is the reference for re-capturing the images.
 
 ### Open
 
-1. **Restart Claude Desktop and run the four example queries** (`PLAN.md` Phase 6). The
-   config is in place and validated; Desktop only reads it at startup. Save the transcripts
-   — Phase 7's README wants them. Then merge `phase-6-mcp` into `main` `--no-ff`.
-2. **`avgDaysToFirstResponse` can be negative, and currently is.** Found while testing the
+1. **Re-shoot the Datadog dashboard screenshot** (optional but worth it). The current
+   capture has an empty "Add Widgets or Powerpacks" placeholder filling the top-right
+   quadrant and ~40% dead space, which reads as unfinished on the page that argues the
+   observability choices were deliberate. Delete the placeholder, arrange the four widgets
+   2×2, re-shoot to the same path. `docs/CAPTURE.md §2`.
+2. **Phase 7 leftovers:** interview-prep notes (`docs/interview-notes.md`), a
+   `SCHEMA.md`-versus-shipped-code reconciliation pass, and the final polish sweep.
+   `PLAN.md` Phase 7.
+3. ~~**`avgDaysToFirstResponse` can be negative.**~~ **Resolved 2026-09-02** by correcting
+   the CodePath application's `appliedDate`, which was later than a stage it already had.
+   The dashboard now reads 31.4 days. **The underlying definition is still unguarded** —
+   `SCHEMA.md §9` puts no floor on the metric and nothing stops a stage predating
+   `appliedDate`, so the same data-entry slip would reproduce it. Noted in `SCHEMA.md §9`
+   rather than fixed, because clamping would hide a genuine data error. Found while testing the
    MCP stats tool. The CodePath application is recorded as applied `2026-09-02` with an
    online assessment completed `2026-08-21` — eleven days *before* it. `SCHEMA.md §9` puts
    no floor on the metric and no rule that a stage must postdate `appliedDate`, so the mean
@@ -150,24 +168,24 @@ pointing into merged history. Harmless; delete them whenever.
    definition (should a stage before `appliedDate` clamp to zero, or be excluded?).
    Deliberately not patched in the MCP layer — hiding it there would be the same
    confidently-wrong failure, only better concealed.
-3. **Check the real custom-metric series count** — Datadog → *Plan &amp; Usage → Custom
+4. **Check the real custom-metric series count** — Datadog → *Plan &amp; Usage → Custom
    Metrics* — after a day of traffic. `MetricsConfig`'s budget table is arithmetic; that page
    is truth, and a series only exists once its tag combination has occurred, so checking
    early under-reports. Lever if it is near 100: `ALLOWED_THIRD_PARTY`, dropping
    `jvm.memory.used` (~16 series) first.
-4. **Backups are still deferred.** Atlas M0 has no automated backup, no undelete and no
+5. **Backups are still deferred.** Atlas M0 has no automated backup, no undelete and no
    point-in-time restore. There is now real data — **6 applications across 4 companies** as
    of 2026-09-02 — so this has stopped being hypothetical, and the argument only gets worse
    as it grows. `RUNBOOK.md` Step 12.
-5. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
+6. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
    iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
    flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
-6. **`npm run preview`** on the built `dist/` — never run locally. Largely moot now that CI
+7. **`npm run preview`** on the built `dist/` — never run locally. Largely moot now that CI
    builds and deploys the real thing on every push.
-7. **Re-run `nginx -t` on the VPS** at some point after certbot's next renewal, and confirm
+8. **Re-run `nginx -t` on the VPS** at some point after certbot's next renewal, and confirm
    the security headers still come back — certbot rewrites the vhost, and the headers are
    `add_header` directives it has no reason to preserve deliberately.
-8. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Applications entered
+9. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Applications entered
    through the live UI at `https://app4jobtrack.me`, chosen to differ in status so the
    funnel, follow-ups and filters had signal. Nothing broke. **This closes Phase 3** —
    `PLAN.md`'s "run your real job-search workflow end-to-end" bar is met, against the

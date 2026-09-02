@@ -53,7 +53,11 @@ cd frontend && npm run dev
 ```
 
 Enter the real search through the UI (companies first, then applications with their true
-`stages[]` and dates), or script it in `backend/src/test/http/backfill.http`.
+`stages[]` and dates).
+
+> **What actually happened:** this step was skipped and done *after* the deploy, through the
+> live UI. It cost nothing that time, but the ordering above is still the right one — a schema
+> problem found here is cheap, and the same problem found once data is in Atlas is not.
 
 Two things to watch for, both of which mean a bug rather than bad input:
 
@@ -773,15 +777,17 @@ timer, the rclone/Object Storage setup and the restore test — see `PLAN.md` Ph
 
 ## Done when
 
-- [ ] `https://app4jobtrack.me` loads the SPA
-- [ ] Google login works end to end in a browser
-- [ ] Full CRUD against the live app: company → application → stage → dashboard reflects it
-- [ ] `curl -sI https://app4jobtrack.me/` shows CSP, HSTS and `X-Frame-Options`
-- [ ] `https://www.app4jobtrack.me/` 301s to the apex
-- [ ] `/api/companies` unauthenticated returns 401; `/actuator/health` is not public
-- [ ] Push to `main` auto-deploys within a few minutes
-- [ ] ~~A backup archive is in Object Storage and a test restore succeeded~~ — **deferred**, see Step 12
-- [ ] You are entering real applications
+All met as of 2026-09-02 except the deferred backup step.
+
+- [x] `https://app4jobtrack.me` loads the SPA
+- [x] Google login works end to end in a browser
+- [x] Full CRUD against the live app: company → application → stage → dashboard reflects it
+- [x] `curl -sI https://app4jobtrack.me/` shows CSP, HSTS and `X-Frame-Options`
+- [x] `https://www.app4jobtrack.me/` 301s to the apex
+- [x] `/api/companies` unauthenticated returns 401; `/actuator/health` is not public
+- [x] Push to `main` auto-deploys within a few minutes
+- [~] ~~A backup archive is in Object Storage and a test restore succeeded~~ — **deferred**, see Step 12
+- [x] You are entering real applications
 
 ---
 

@@ -918,9 +918,10 @@ with the bearer token.
       is robust; it does *not* show a bare `"node"` would fail, and Desktop's own log shows
       it building a PATH that would find one. See `CLAUDE.md §6` for the trade-off under
       nvm.
-- [ ] **Restart Claude Desktop; confirm the tools appear.** Needs a human — the config is
-      written and validated, but Desktop only reads it at startup.
-- [ ] Run the example queries and save transcripts:
+- [x] **Restart Claude Desktop; confirm the tools appear.** Done — Desktop's log
+      (`~/Library/Logs/Claude/mcp-server-job-tracker.log`) shows a completed handshake and
+      `tools/list`, and the four tools are callable.
+- [x] Run the example queries and save transcripts — in `README.md`, "A real session":
   - "How many applications have I sent this month?"
   - "Which companies haven't I heard back from in 2+ weeks?"
   - "What interviews do I have this week?"
@@ -930,12 +931,17 @@ with the bearer token.
 queries return correct answers; transcripts are saved for the README; the bearer token is
 confirmed read-only (a tool cannot mutate data even if asked).
 
-**Status (2026-09-02): built, tested against the live API, and wired in — not yet driven
-from Claude Desktop itself.** All four tools return correct data over a real stdio
-handshake, and the read-only guarantee is confirmed against the deployed instance:
-`POST` / `PUT` / `PATCH` / `DELETE` with the MCP token all return **403** and nothing was
-created. What is left needs a human: restart Claude Desktop, confirm the tools appear, run
-the four example queries, save the transcripts.
+**Status (2026-09-02): complete.** All four tools return correct data over a real stdio
+handshake; the read-only guarantee is confirmed against the deployed instance
+(`POST` / `PUT` / `PATCH` / `DELETE` with the MCP token all return **403**, nothing created);
+the server is connected in Claude Desktop and the example queries have been run, with the
+transcript in `README.md`. Merged to `main` `--no-ff`.
+
+**One query worth more than the four planned ones**, and it was not on the list: *"how many
+this month vs the last 30 days?"* It makes the model pick two different windows in one turn
+and name each — which is the calendar-vs-rolling rule the tool descriptions exist to force,
+demonstrated rather than asserted. A rolling `days=30` alone would have answered "3" to "how
+many this month?", which is wrong and would have looked right.
 
 **Gotchas:**
 - MCP stdio servers must not write anything but protocol messages to **stdout** — send all
@@ -975,7 +981,8 @@ notes.
     email allowlist**, so a visitor lands on the landing page and cannot get in. Without it
     the deployment reads as broken to exactly the audience the link exists for.
 - [ ] `deploy/RUNBOOK.md` finalized (server setup, deploy, rollback, restore-from-backup).
-- [ ] Fill in `CLAUDE.md §9` with the now-real commands; set `CLAUDE.md §2` to "shipped".
+- [x] Fill in `CLAUDE.md §9` with the now-real commands (backend, frontend **and**
+      mcp-server, plus the build-then-restart-Desktop rule); `CLAUDE.md §2` reflects Phase 7.
 - [ ] Interview prep notes (`docs/interview-notes.md` or a private doc):
   - Why MongoDB fit this model (status-dependent stage fields, evolving pipeline shape)
     vs. a relational `applications` table — and why the company/application split uses
@@ -998,16 +1005,18 @@ point with specifics from your own usage.
 
 ## Cross-cutting checklist (keep true throughout)
 
-- [ ] No secrets in git. `application-local.yml` (if sensitive) and all `.env` files are
-      gitignored.
-- [ ] Every new decision or reversal gets a dated entry in `CLAUDE.md §6`.
-- [ ] `mvn verify` stays green on `main`.
-- [ ] Every endpoint has at least one integration test (happy path + primary failure).
-- [ ] `SCHEMA.md` and the code agree — reconcile immediately on any drift.
-- [ ] `STATE.md` is updated at the end of each session — branch, what is built, what is
-      next, and any new trap worth not rediscovering.
-- [ ] `CLAUDE.md §2` reflects the current phase at the end of each session.
-- [ ] Commit messages end with the `Claude-Session:` trailer carrying **the current
-      session's URL** — a new one each session, not one URL copied forever
-      (`CLAUDE.md §11`).
-- [ ] Datadog custom-metric series stay under ~100 (`CLAUDE.md §6`).
+- [x] No secrets in git. `application-local.yml` (if sensitive) and all `.env` files are
+      gitignored — including `mcp-server/.env`, verified with `git check-ignore`, and the
+      live MCP token was confirmed absent from the staged diff before committing Phase 6.
+- [x] Every new decision or reversal gets a dated entry in `CLAUDE.md §6` — including the
+      reversals, left visible and marked rather than rewritten.
+- [x] `mvn verify` stays green on `main` — **112 tests** (25 unit, 87 integration), last run
+      2026-09-02 with `jt-mongo` stopped.
+- [x] Every endpoint has at least one integration test (happy path + primary failure).
+- [~] `SCHEMA.md` and the code agree — a full reconciliation pass is still owed (Phase 7).
+- [x] `STATE.md` is updated at the end of each session.
+- [x] `CLAUDE.md §2` reflects the current phase at the end of each session.
+- [x] Commit messages end with the `Claude-Session:` trailer carrying **the current
+      session's URL**.
+- [ ] Datadog custom-metric series stay under ~100 (`CLAUDE.md §6`) — arithmetic says yes;
+      the *Plan & Usage* page has not been checked after a day of traffic (`STATE.md` open).
