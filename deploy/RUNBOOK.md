@@ -570,9 +570,12 @@ Copy the three config files from the repo (they are already written and were ver
 `nginx -t` plus real request/response testing — see `CLAUDE.md §6`, 2026-09-02):
 
 ```bash
-# from your laptop, in the repo root
-scp deploy/nginx-jobtracker.conf deploy@<VPS_IP>:/tmp/
-scp deploy/jobtracker-proxy.conf deploy/jobtracker-security-headers.conf deploy@<VPS_IP>:/tmp/
+# from your laptop, in the repo root. -i because a bare deploy@<VPS_IP> will not match a
+# `Host` alias in ~/.ssh/config and will fail with Permission denied (publickey).
+scp -i ~/.ssh/jobtracker_deploy \
+    deploy/nginx-jobtracker.conf deploy/jobtracker-proxy.conf \
+    deploy/jobtracker-security-headers.conf \
+    deploy@<VPS_IP>:/tmp/
 
 # on the server
 sudo mkdir -p /etc/nginx/snippets
