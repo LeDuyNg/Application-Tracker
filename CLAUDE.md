@@ -1127,13 +1127,26 @@ queries.
   defaults to the machine's zone (this runs on the laptop, so that is the owner's) with
   `APP_TIMEZONE` as an override. Same family as the `LocalDate` trap in `STATE.md §4`,
   arriving in the presentation layer this time.
-- **`claude_desktop_config.json` must name an absolute path to `node`.** Desktop launches
-  the server with a minimal environment, not the shell's, so a bare `"node"` is not on
-  `PATH` and the server fails to start with nothing useful to show for it. Verified by
-  launching the exact configured command with `PATH=/usr/bin:/bin` from `/`. **Node here is
-  installed via nvm, so that absolute path carries a version number** and will break on the
-  next `nvm install` — recorded in `STATE.md §4` with the one-liner to repoint it, because
-  the symptom (Desktop says the server failed to start) points nowhere near the cause.
+- **`claude_desktop_config.json` names an absolute path to `node`, and the reason is
+  narrower than it first looked.** The original claim written here — that Desktop launches
+  with a minimal environment so a bare `"node"` would not resolve — is **wrong for this
+  Desktop version**, and its own log says so: it assembles a PATH explicitly and that PATH
+  includes `~/.nvm/versions/node/v25.2.1/bin`. A bare `"node"` would very likely have
+  worked. What was actually verified is the weaker statement that the absolute path works
+  even under `PATH=/usr/bin:/bin`, launched from `/`.
+
+  The real trade-off, with Node installed via nvm: an **absolute path** is independent of
+  however Desktop resolves PATH — undocumented behaviour that has varied across versions —
+  but carries a version number and breaks on the next `nvm install`. A bare **`"node"`**
+  depends on that PATH harvesting but then follows nvm's current default automatically, so
+  it survives Node upgrades. Neither is strictly better; the absolute path is in place
+  because it demonstrably works, and the failure mode is recorded in `STATE.md §4` with the
+  one-liner to repoint it, since the symptom (Desktop reports the server failing to start)
+  points nowhere near the cause.
+
+  **Recorded this way deliberately.** The mistake was asserting a mechanism from a plausible
+  general belief about MCP clients rather than from this client's behaviour, having only
+  tested that the chosen option worked — testing the alternative would have shown it too.
 - **Tested with a scripted stdio client rather than the MCP Inspector.** The Inspector is an
   interactive browser UI and cannot assert anything. A script does `initialize` →
   `tools/list` → `tools/call` across all four tools and four failure scenarios, and — the

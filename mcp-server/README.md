@@ -64,16 +64,22 @@ ssh app4jobtracker 'sudo grep APP_MCP_TOKEN /etc/jobtracker/jobtracker.env'
 
 Restart Claude Desktop after editing. Then ask it "what interviews do I have this week?".
 
-### Two things about that config that will cost you an afternoon
+### About `command`, and why it is an absolute path
 
-**`command` must be an absolute path to `node`.** Claude Desktop launches the server with a
-minimal environment, not your shell's — so a bare `"node"` is not on `PATH` and the server
-fails to start with no useful message. Verified here by launching the exact configured
-command with `PATH=/usr/bin:/bin` from `/`.
+`command` is an absolute path to the `node` binary rather than a bare `"node"`. Two options,
+and the trade-off is real rather than one being simply correct:
 
-**Node is installed via nvm, so that absolute path contains a version number** and will
-break the next time you `nvm install` a newer Node. When Claude Desktop suddenly reports the
-server failing to start, this is why. Repoint it:
+- **Absolute path** (what is configured): independent of however Claude Desktop resolves
+  `PATH`, which is undocumented and has varied between versions. Verified working by
+  launching the exact configured command with `PATH=/usr/bin:/bin` from `/`. **But Node here
+  is installed via nvm, so the path carries a version number** and breaks the next time you
+  `nvm install` a newer Node.
+- **Bare `"node"`**: relies on Desktop's own PATH handling — which on this version does work,
+  its log shows it assembling a `PATH` that includes the nvm bin directory — and then follows
+  nvm's current default automatically, so it survives Node upgrades.
+
+If Claude Desktop suddenly reports the server failing to start after a Node upgrade, the
+pinned path is why. Repoint it:
 
 ```bash
 python3 - <<'PY'

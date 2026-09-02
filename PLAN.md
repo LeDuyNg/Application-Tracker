@@ -914,8 +914,10 @@ with the bearer token.
       ```
 - [x] Verified the configured command works the way Claude Desktop will run it: the exact
       `command`/`args`/`env` from the config, launched with `PATH=/usr/bin:/bin` from `/`,
-      completes a handshake and returns live data. **`command` must be an absolute path to
-      `node`** — Desktop does not inherit your shell's `PATH`.
+      completes a handshake and returns live data. That shows an **absolute path to `node`**
+      is robust; it does *not* show a bare `"node"` would fail, and Desktop's own log shows
+      it building a PATH that would find one. See `CLAUDE.md §6` for the trade-off under
+      nvm.
 - [ ] **Restart Claude Desktop; confirm the tools appear.** Needs a human — the config is
       written and validated, but Desktop only reads it at startup.
 - [ ] Run the example queries and save transcripts:

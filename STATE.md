@@ -127,7 +127,9 @@ pointing into merged history. Harmless; delete them whenever.
   nothing but protocol frames. **Read-only confirmed against the deployed instance:** `POST`,
   `PUT`, `PATCH`, `DELETE` with the real MCP token all return 403 and the probe created
   nothing. `claude_desktop_config.json` is written (previous version backed up beside it)
-  and its exact command verified under `PATH=/usr/bin:/bin` from `/`.
+  and its exact command verified under `PATH=/usr/bin:/bin` from `/` — which shows the
+  absolute path is robust, but does **not** show a bare `"node"` would fail; see the
+  `command` row in §4.
 
 ### Open
 
@@ -270,8 +272,7 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `mongodump` prints the URI on failure | Password included, straight into scrollback. Pipe probe output through `sed -E 's\|(//)[^:]*:[^@]*(@)\|\1USER:PASS\2\|'`. |
 | `ssh user@ip` vs a `Host` alias | A `~/.ssh/config` `Host myalias` block matches the **alias**, not the address inside it. `ssh ubuntu@<ip>` matches nothing, falls back to default identities, and fails `Permission denied (publickey)` on a box reachable a second earlier by alias. |
 | `.with(csrf())` mutates the **shared** Spring context | `SecurityMockMvcRequestPostProcessors.csrf()` swaps the `CsrfTokenRepository` on the shared `CsrfFilter` bean for a test double holding the token in a request attribute, not a cookie — and the swap lasts the rest of the JVM run, because the four `@AutoConfigureMockMvc` IT classes share one cached context. Any test asserting on a real `XSRF-TOKEN` cookie therefore only passes if it runs before every `.with(csrf())` test anywhere. Fixed by isolating that assertion in `CsrfCookieIT` with `@DirtiesContext(BEFORE_CLASS)`. |
-| Claude Desktop's `PATH` | It launches an MCP server with a **minimal environment, not your shell's**, so `"command": "node"` is not found and the server fails to start with nothing useful logged. Use an absolute path to the node binary. |
-| That absolute node path, under nvm | Node here lives at `~/.nvm/versions/node/v25.2.1/bin/node` — the path **carries a version number**, so the next `nvm install` silently breaks `claude_desktop_config.json`. Symptom: Desktop reports the server failing to start, pointing nowhere near the cause. `mcp-server/README.md` has a one-liner to repoint it. |
+| `command` in `claude_desktop_config.json`, under nvm | **Not the trap it was first written up as.** Desktop does *not* launch with a stripped environment — its own log (`~/Library/Logs/Claude/mcp-server-job-tracker.log`) shows it assembling a PATH that includes `~/.nvm/versions/node/v25.2.1/bin`, so a bare `"node"` would probably resolve. The genuine trade-off: an **absolute path** is immune to however Desktop resolves PATH (undocumented, version-dependent) but carries a version number and **breaks on the next `nvm install`**; a bare **`"node"`** depends on that harvesting but follows nvm's default and survives upgrades. Currently absolute, because it is verified working. Symptom if it breaks: Desktop reports the server failing to start, pointing nowhere near the cause — `mcp-server/README.md` has the one-liner to repoint it. |
 | stdout on an MCP stdio server | stdout carries protocol frames. One `console.log` corrupts the stream and the server "won't connect", with no error explaining why. Everything diagnostic goes to **stderr**, which Desktop captures. Assert it: parse every stdout line as JSON in a test client. |
 | `@types/node` on a DOM-less tsconfig | With `lib: ["es2023"]` and no `"types"` entry, `process`, `fetch`, `Response`, `URL` and `AbortSignal` are all "Cannot find name" even though `@types/node` is installed. Set `"types": ["node"]` explicitly. |
 | Reading a `Response` body twice | `await response.text()` consumes the stream; a second read throws. If you want both a message *and* the parsed problem JSON from one error response, read the text once and derive both from it. |
