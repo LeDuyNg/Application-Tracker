@@ -42,7 +42,14 @@ app:
   allowed-emails: you@example.com
 
   # Shared with the MCP server, which sends it as `Authorization: Bearer <token>`.
-  # Generate one with:  openssl rand -base64 48
+  #
+  #     openssl rand -hex 32
+  #
+  # Hex rather than base64 on purpose. The same value is later pasted into
+  # /etc/jobtracker/jobtracker.env as APP_MCP_TOKEN=... , and base64's `+ / =` are
+  # characters that YAML, systemd's EnvironmentFile parser and shell quoting each treat
+  # specially in their own way. 32 bytes of hex is 256 bits of entropy with no character
+  # that anything downstream can misread.
   mcp-token: PASTE_A_LONG_RANDOM_STRING_HERE
 
 # --- Datadog -----------------------------------------------------------------
