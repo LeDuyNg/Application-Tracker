@@ -1009,6 +1009,40 @@ the suite was the thing that was wrong. It took an environment that genuinely la
 ambient dependency, which is the first concrete argument this project has produced for CI
 existing at all beyond convenience.
 
+### 2026-09-02 — A test that passed locally and failed in CI, with identical code
+
+The second thing the first CI runs found, and a better bug than the first.
+`SecurityIT.csrfCookieIsNotDeferred` failed on the runner with `No cookie with name
+'XSRF-TOKEN'`, having been green on the laptop through three phases — including under
+`./mvnw verify`, run immediately beforehand.
+
+- **Root cause: `.with(csrf())` mutates shared state.**
+  `SecurityMockMvcRequestPostProcessors.csrf()` does not merely decorate a request. It
+  replaces the `CsrfTokenRepository` on the shared `CsrfFilter` bean with a test double that
+  keeps the token in a request attribute instead of a cookie — and that swap persists for the
+  remainder of the JVM run. Four IT classes carry `@AutoConfigureMockMvc` over
+  `AbstractMongoIT`, so Spring caches and reuses **one** context across all of them. The
+  cookie assertion therefore only held while it ran before *every* `.with(csrf())` test in any
+  of those classes.
+- **Why the machines disagreed: Maven's `runOrder` defaults to `filesystem`.** A filesystem
+  enumerates in its own order, and macOS and a Linux runner do not agree. So class order — and
+  with it the outcome — differed between the two with no code difference at all. Now pinned to
+  `alphabetical` for both Surefire and Failsafe.
+- **The fix is isolation, not ordering.** `CsrfCookieIT` holds that single assertion with
+  `@DirtiesContext(BEFORE_CLASS)`, so it runs against a context whose `CsrfFilter` still has
+  the real `CookieCsrfTokenRepository`. Pinning `runOrder` alone would have *hidden* this
+  rather than fixed it — the test would still have been one alphabetically-earlier class away
+  from breaking again.
+- **Verified across all four orderings** (`alphabetical`, `reversealphabetical`, `hourly`,
+  `filesystem`) and with the dev Mongo container stopped. `-Dfailsafe.runOrder=reversealphabetical`
+  reproduces the CI ordering locally and is the way to check this class of problem in future.
+
+**`STATE.md §4` previously described this as "order-fragile" and worked around it** by putting
+the logout tests in their own class. That was the right instinct applied to the wrong cause:
+the trigger was identified, the mechanism was not, and the workaround left the test one
+alphabetical accident from failing. Recorded because "we noticed it was flaky and moved things
+around" is how a real bug survives.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)

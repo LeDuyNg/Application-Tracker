@@ -155,9 +155,28 @@
                 *IT            -> Failsafe, runs on `mvn verify`. Testcontainers, needs Docker.
               Failsafe's `verify` goal is what makes a failed IT fail the build.
             -->
+            <!--
+              Pin the test order. Maven's default runOrder is `filesystem`, which enumerates
+              differently on macOS and on a Linux CI runner — so the two disagree about which
+              test class runs first, and any test sensitive to shared-context state passes on
+              one and fails on the other with no code difference. That cost a CI-only failure
+              once (CsrfCookieIT's javadoc has the story). Alphabetical is arbitrary but the
+              same everywhere, which is the whole point.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <runOrder>alphabetical</runOrder>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <runOrder>alphabetical</runOrder>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

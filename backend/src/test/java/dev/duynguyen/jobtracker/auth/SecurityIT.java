@@ -64,16 +64,8 @@ class SecurityIT extends AbstractMongoIT {
             assertThat(result.getResponse().getHeader(HttpHeaders.LOCATION)).isNull();
         }
 
-        @Test
-        @DisplayName("the XSRF-TOKEN cookie is set even on a rejected request")
-        void csrfCookieIsNotDeferred() throws Exception {
-            // Guards the setCsrfRequestAttributeName(null) line. Since Spring Security 6 the
-            // token is generated lazily, so without that opt-out this cookie is absent until
-            // something reads the token — and an SPA that loads then immediately POSTs gets
-            // a 403 that looks like a bug in its own code.
-            mvc.perform(get("/api/applications"))
-                    .andExpect(cookie().exists("XSRF-TOKEN"));
-        }
+        // The XSRF-TOKEN cookie assertion lives in CsrfCookieIT — it needs a context no
+        // .with(csrf()) test has touched. See that class for why.
 
         @Test
         @DisplayName("health is open on loopback only; Google's login entry point is reachable")
