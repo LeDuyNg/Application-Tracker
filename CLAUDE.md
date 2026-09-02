@@ -1014,7 +1014,7 @@ takes `DD_API_KEY` through its own config, not the app's).
 | `APP_MCP_TOKEN` | API + MCP server | long random string; MCP sends it as `Authorization: Bearer` |
 | `APP_BASE_URL` | API | `https://<your-domain>` — used for the OAuth redirect |
 | `DD_API_KEY` | API (metrics) | Datadog API key for the Micrometer registry |
-| `DD_SITE` | API (metrics) | e.g. `datadoghq.com` |
+| `DD_SITE` | API (metrics) | **`us5.datadoghq.com`** for this org. Datadog runs several sites (`datadoghq.com` = US1, `us3`, `us5`, `datadoghq.eu`, `ap1`) and a key is valid only on its own; a mismatch is rejected silently — no error worth noticing, no data in the UI. `application-prod.yml` builds the Micrometer `uri` from this. |
 | `API_BASE_URL` | MCP server | `https://<your-domain>` |
 
 Spring profiles:

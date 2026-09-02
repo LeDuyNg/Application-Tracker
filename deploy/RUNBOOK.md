@@ -269,7 +269,7 @@ APP_ALLOWED_EMAILS=duy.le.21.ng@gmail.com
 APP_MCP_TOKEN=
 APP_BASE_URL=https://app4jobtrack.me
 DD_API_KEY=
-DD_SITE=datadoghq.com
+DD_SITE=us5.datadoghq.com
 EOF
 sudo chmod 600 /etc/jobtracker/jobtracker.env
 sudo chown jobtracker:jobtracker /etc/jobtracker/jobtracker.env
@@ -373,6 +373,25 @@ Five things in that file worth understanding:
   paste it in along with `DD_SITE`. Metrics then start flowing from the first boot;
   Micrometer pushes straight to the Datadog API over HTTPS and needs no Agent, so this is
   safe to have on during the deploy.
+
+  **`DD_SITE` must match your org's Datadog site, and the obvious default is probably
+  wrong.** Datadog runs several (`datadoghq.com` = US1, `us3`, `us5`, `datadoghq.eu`,
+  `ap1`), a key is valid only on its own, and a mismatch fails in the least helpful way
+  available: metrics are rejected, nothing appears in the UI, and the app looks perfectly
+  healthy. This org is **US5**. Confirm rather than trust — the site is in the browser URL
+  when you are logged in, and this settles it from the server:
+
+  ```bash
+  DD_KEY=$(sudo sed -n 's/^DD_API_KEY=//p' /etc/jobtracker/jobtracker.env)
+  for S in datadoghq.com us3.datadoghq.com us5.datadoghq.com datadoghq.eu ap1.datadoghq.com; do
+    printf '%-22s %s\n' "$S" "$(curl -s "https://api.$S/api/v1/validate" -H "DD-API-KEY: $DD_KEY")"
+  done
+  ```
+
+  Whichever returns `{"valid":true}` is yours. Check the key's shape while you are there:
+  `echo -n "$DD_KEY" | wc -c` should be **32**. A 40-character value is an *Application*
+  key rather than an API key — they sit on the same settings page and only the API key
+  works here.
 
   **If you leave it blank the app will not start at all.** `application-prod.yml` enables
   the Micrometer Datadog registry, which auto-configures on classpath presence alone and
