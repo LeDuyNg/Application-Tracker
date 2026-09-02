@@ -60,8 +60,9 @@ path in `CLAUDE.md §5` becomes real.
       1 GB RAM**, **Ubuntu 24.04 (x86_64)**, ~50 GB boot volume.
       *A1 was the original choice and is unobtainable — see `CLAUDE.md §6`. Always Free
       resources exist only in your home region, so a different region is not a workaround.*
-- [ ] Note you get **two** of these free. Leave the second uncreated for now; Phase 5 uses
-      it to host the Datadog Agent during the APM trial, keeping it off the app box.
+- [ ] **One instance only.** The Always Free description implies two E2 micros, but this
+      tenancy has one usable. Phase 5 is planned around that: no Datadog Agent in
+      production, and APM captured locally (`CLAUDE.md §6`).
 - [ ] Expect a slow first boot and slow `apt` operations — 1/8 OCPU baseline. It bursts to a
       full OCPU, which covers JVM startup and request handling; sustained CPU work is what
       it cannot do. Single-user traffic is well within it.
@@ -623,9 +624,9 @@ restore succeeded. **You start entering real applications.**
 
 ## Phase 5 — Datadog
 
-**Objective:** custom metrics and host metrics flowing continuously, plus a ~2-week window
-of APM traces, a dashboard with 3+ widgets, and one alert — all against the deployed
-instance. Screenshots captured for the README.
+**Objective:** custom metrics flowing continuously from the deployed instance, a dashboard
+with 3+ widgets, and one alert — plus APM traces captured from a **local** run during the
+14-day trial. Screenshots captured for the README, each labelled with where it came from.
 
 **Prerequisites:** Phase 4 live and receiving some real traffic; the Datadog **Pro** plan
 confirmed in Phase 0.
@@ -634,9 +635,10 @@ confirmed in Phase 0.
 > ~13-month metric retention instead of the free tier's 1 day — which is the difference
 > between an "applications created over time" widget that tells a story and one that shows
 > yesterday. Because host slots are free, **the Agent is installed permanently**, not
-> ripped out with the trial — **except that the host change to a 1 GB micro reverses
-> exactly that**: see the Agent section below. Host infra metrics for the app box are the
-> casualty; the app's own custom metrics are unaffected. **APM is the one thing Pro does not include** — it is a separate paid SKU, so
+> ripped out with the trial — **except that the host change to a single 1 GB micro reverses
+> exactly that**: see the Agent section below. There is no Agent in production and therefore
+> no production APM; host infra metrics are the casualty. The app's own custom metrics are
+> unaffected, because Micrometer pushes them straight to the API. **APM is the one thing Pro does not include** — it is a separate paid SKU, so
 > the trace-capture window below is unchanged and still one-shot.
 
 ### Custom metrics (permanent)
@@ -662,41 +664,42 @@ confirmed in Phase 0.
       *Plan & Usage → Custom Metrics* for the actual series count once traffic has run for
       a day.
 
-### Datadog Agent — NOT on the app host
+### Datadog Agent — nowhere in production
 
-The host change to a 1 GB micro reverses the earlier "Agent stays permanently" decision
-(`CLAUDE.md §6`): ~0.5 GB RSS does not fit beside a JVM in 1 GB. Custom metrics are
-unaffected — Micrometer pushes straight to the Datadog API and never needed an agent. What
-is lost is host infra metrics for the app box, which is a fair price for the app staying up.
+Two constraints combine: the Agent needs ~0.5 GB, and there is exactly **one** 1 GB host,
+already carrying a JVM at ~500 MB plus Nginx and the OS. There is nowhere to put it
+(`CLAUDE.md §6`). Custom metrics are unaffected — Micrometer pushes straight to the Datadog
+API over HTTPS and never needed an agent.
 
-- [ ] Do **not** `apt install datadog-agent` on the app host.
-- [ ] If you want host metrics anyway, install the Agent on the **second free micro** and
-      accept that it reports that box's metrics, not the app box's.
+- [ ] Do **not** `apt install datadog-agent` on the VPS. If you try it anyway, the box will
+      swap continuously on network-attached storage and the app will be visibly slow — you
+      would be breaking the running app to produce a screenshot.
+- [ ] Accept the one loss: **no host infra metrics** (CPU/memory/disk) for the app box in
+      Datadog. The dashboard is built from application metrics instead, which is the more
+      interesting half anyway.
 
-### APM (trial window — one shot)
-- [ ] **Start the APM trial now**, not earlier: it is 14 days and you want real traffic in
-      it. If Phase 0 found that no APM trial is offerable on the student Pro plan, stop and
-      re-plan this section rather than burning the deploy on it.
-- [ ] Download `dd-java-agent.jar` to `/opt/jobtracker/`. Verify the version lists **JDK
-      25** support before adding the flag.
-- [ ] **Create the second free micro** and install the Datadog Agent there with
-      `DD_API_KEY`, `DD_SITE` and `DD_APM_ENABLED=true`. Bind its trace intake to the
-      private subnet, not `0.0.0.0`.
-      *`dd-trace-java` needs an Agent to send traces to — but it does not have to be local.
-      Putting it on the second box keeps ~0.5 GB off the app host and costs nothing.*
-- [ ] Add to `jobtracker.service` `ExecStart`: `-javaagent:/opt/jobtracker/dd-java-agent.jar`,
-      and put `DD_SERVICE=jobtracker-api`, `DD_ENV=prod`, `DD_VERSION=<sha>` and
-      **`DD_AGENT_HOST=<second micro's private IP>`** in `/etc/jobtracker/jobtracker.env`
-      (updated by CI) rather than in the unit file, so a deploy doesn't have to rewrite the
-      unit. Restart.
-- [ ] Watch memory closely while the javaagent is attached — it adds roughly 50–100 MB on
-      top of the heap. If the app starts swapping, drop `-Xmx` to 192m for the trial window.
-- [ ] **Fallback if 1 GB simply cannot carry the javaagent:** run the app plus a local Agent
-      on your laptop during the trial, capture the trace and service-map screenshots there,
-      and say plainly in the README that APM was evaluated locally while production runs
-      metrics-only. An honest smaller claim beats a vague larger one.
-- [ ] Generate traffic (use the app, run `jobtracker.http` against prod) and confirm
-      traces + the service map in APM.
+### APM — local, during the trial window
+
+Not on the VPS, for the reasons above. This is still a real `dd-trace-java` setup producing
+real flame graphs; it just traces a local run rather than the deployed one. Label it that
+way everywhere it appears.
+
+- [ ] **Start the APM trial now**, not earlier — it is 14 days and you want the local
+      instrumentation working before the clock starts. If Phase 0 found that no APM trial is
+      offerable on the student Pro plan, stop and re-plan this section.
+- [ ] Install the Datadog Agent **on your laptop** (`DD_API_KEY`, `DD_SITE`,
+      `DD_APM_ENABLED=true`).
+- [ ] Download `dd-java-agent.jar` locally. Verify the version lists **JDK 25** support.
+- [ ] Run the app locally against local MongoDB with
+      `-javaagent:/path/dd-java-agent.jar`, `DD_SERVICE=jobtracker-api`, `DD_ENV=local`.
+      An IntelliJ run configuration copied from **JobTracker (local)** with those VM options
+      is the easiest way; do not commit it if it holds the API key.
+- [ ] Drive it with `backend/src/test/http/jobtracker.http` so the traces cover every
+      endpoint, including a deliberate 404 and 400 so error traces appear.
+- [ ] Capture: a flame graph for `GET /api/stats` (the aggregation is the interesting one),
+      the service map showing the Mongo dependency, and the endpoint latency list.
+- [ ] Note what the traces actually taught you — the `$facet` round trip versus the second
+      aggregation for average-days is a concrete thing to point at in an interview.
 
 ### Dashboard + alert
 - [ ] Dashboard "Job Tracker — API" with ≥ 3 widgets: request latency (p50/p95/p99),
@@ -708,20 +711,25 @@ is lost is host infra metrics for the app box, which is a fair price for the app
 - [ ] Screenshot the dashboard and an APM trace for the README.
 
 ### Wind down (APM only)
-- [ ] After capturing everything (before the trial ends): remove the `-javaagent` flag and
-      `DD_AGENT_HOST`, redeploy, and **terminate the second micro** (or leave it idle — it
-      is free either way). The app host never had an Agent to remove.
+- [ ] Before the trial ends, capture everything you need — there is no second window.
+- [ ] Remove the local Agent and the `-javaagent` flag from the local run configuration.
+      Production is untouched throughout: it never had an Agent or a javaagent.
 - [ ] Note in `CLAUDE.md §2` that APM is trial-only and currently off, and when the trial
       ended.
 
-**Done when:** custom metrics and host metrics are visible in Datadog and survive the APM
-trial ending; you have dashboard + APM screenshots; the error-rate monitor exists and has
-been test-fired (temporarily lower the threshold or generate errors to see it alert); the
-custom-metric series count is comfortably under 100.
+**Done when:** custom metrics from the deployed instance are visible in Datadog and survive
+the APM trial ending; the dashboard is built from those metrics; the error-rate monitor
+exists and has been test-fired (temporarily lower the threshold or generate errors to see it
+alert); local APM screenshots are captured and **labelled as local**; the custom-metric
+series count is comfortably under 100.
 
 **Gotchas:**
 - **APM is a separate paid SKU** — not part of Pro, student pack or otherwise. Everything
   APM must be screenshotted during the trial; there is no second window.
+- **Do not be tempted to put the Agent on the VPS "just for an hour".** One 1 GB host
+  already running a JVM has no room; it will swap on network-attached storage and the app
+  will be visibly degraded. Breaking the running app to produce a screenshot is a bad
+  trade, and the screenshot would show a pathologically slow service anyway.
 - `dd-trace-java` on a current LTS (25) should be fine; still verify the agent version's
   supported-JDK list before adding the flag.
 - The Micrometer registry counts as "custom metrics" for billing, and the budget is per
@@ -840,7 +848,10 @@ notes.
   - Data model summary (link `SCHEMA.md`).
   - Local setup (backend, frontend, mcp) — the commands from `CLAUDE.md §9`.
   - Deployment overview (link `deploy/RUNBOOK.md`).
-  - Datadog dashboard screenshot + APM trace screenshot.
+  - Datadog dashboard screenshot (from the deployed instance) + APM trace screenshot
+    (**labelled as a local run** — say why: the free 1 GB host cannot run the Agent
+    alongside the JVM. Being explicit about a constraint you reasoned through reads better
+    than an unqualified claim that invites an awkward question).
   - MCP: the config snippet + 2–3 example query transcripts.
   - Screenshots of the dashboard UI.
 - [ ] `deploy/RUNBOOK.md` finalized (server setup, deploy, rollback, restore-from-backup).

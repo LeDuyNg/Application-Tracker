@@ -18,8 +18,11 @@ layer.
 Four deliverables, all built around one data store:
 
 1. **CRUD app** — Spring Boot REST API + React dashboard over MongoDB.
-2. **Datadog integration** — APM traces + custom metrics + a dashboard + one alert, against
-   the *deployed* instance.
+2. **Datadog integration** — custom metrics + a dashboard + one alert, against the
+   *deployed* instance, plus APM traces captured from a **local** run during the 14-day
+   trial. The 1 GB host cannot carry the Datadog Agent alongside the JVM, and only one
+   instance is available — see §6. Say which is which; a smaller true claim beats a vague
+   larger one.
 3. **MCP server** — a thin, read-only layer letting Claude Desktop answer natural-language
    questions about the job search ("how many applications this month?", "what interviews
    do I have this week?").
@@ -37,8 +40,13 @@ Four deliverables, all built around one data store:
 ### Resume bullet (draft — keep in sync with reality)
 
 > Built and deployed a full-stack job application tracker (Java 25, Spring Boot 4, React,
-> MongoDB Atlas) with Datadog APM/alerting and an MCP server enabling natural-language
-> queries over application status and interview stages via Claude Desktop.
+> MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
+> natural-language queries over application status and interview stages via Claude Desktop.
+
+*(Says "metrics, dashboards and alerting", not "APM": those are what run continuously
+against the deployed instance. APM tracing is exercised locally during the trial and is
+worth discussing in an interview — but claiming it as a production capability would not
+survive a follow-up question.)*
 
 ---
 
@@ -72,7 +80,7 @@ Update this table at the end of every working session.
 | Security | **Spring Security** + `spring-boot-starter-oauth2-client` | Google OAuth2 login for the SPA; a static bearer token for the MCP server. |
 | API docs | **springdoc-openapi 3.x** | Swagger UI at `/swagger-ui.html` — useful for manual testing while learning. **Pin the 3.x line**: springdoc 2.x targets Boot 3 / Framework 6 and will not work on Boot 4. **Disabled in prod** (`springdoc.api-docs.enabled=false`) — see §6. |
 | Metrics | **Micrometer** + `micrometer-registry-datadog` | Pushes custom metrics straight to the Datadog API over HTTPS — independent of whether the Agent is installed. Budget: ~100 custom timeseries (see §6). |
-| APM | **`dd-trace-java`** javaagent | Added to the systemd unit **only during the 14-day APM trial**, then removed. APM is a separate paid SKU and is *not* part of the student-pack Pro plan (see §6). |
+| APM | **`dd-trace-java`** javaagent, **local only** | Never runs on the VPS: tracing needs a Datadog Agent to send to, and the Agent plus a JVM does not fit in 1 GB. Exercised on the laptop during the 14-day trial for screenshots and interview material. APM is also a separate paid SKU, not part of student-pack Pro (see §6). |
 | Tests | JUnit 5, **Testcontainers** (real MongoDB), Spring Boot Test | `*Test` = unit (Surefire), `*IT` = integration (Failsafe). Use the `mongo:8` image to match the Atlas major version. |
 
 ### Frontend
@@ -103,7 +111,7 @@ Update this table at the end of every working session.
 ### Deployment / infra
 | Thing | Choice | Notes |
 |---|---|---|
-| Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** Two of these are always free. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
+| Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** One instance. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
 | OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for `dd-trace-java` and any native dependency. |
 | Runtime deploy | **Fat JAR + `systemd`** — **no Docker on the VPS** | Mongo is managed (Atlas), so the box only runs the API + Nginx; Docker's parity/autodiscovery wins don't apply and it costs memory. |
 | Reverse proxy / TLS | **Nginx + certbot (Let's Encrypt)** | Same pattern the owner used on a prior project. Serves the SPA static build and proxies `/api`, `/oauth2`, `/login` to `127.0.0.1:8080`. |
@@ -135,7 +143,8 @@ Update this table at the end of every working session.
   Claude Desktop ──stdio──▶  MCP server (local, TS)  ───┘  (calls the deployed /api)
 
   Spring Boot API ──HTTPS──▶ Datadog API   (custom metrics via Micrometer, always)
-  Datadog Agent (VPS, TRIAL ONLY) ─────────▶ Datadog   (APM traces, ~2 weeks then removed)
+  Local dev run + Datadog Agent (laptop) ──▶ Datadog   (APM traces, trial window only —
+                                                        never on the 1 GB VPS)
 ```
 
 ### Request flows
@@ -148,8 +157,10 @@ Update this table at the end of every working session.
   calls the deployed `/api/...` endpoint with `Authorization: Bearer <MCP_TOKEN>` → a
   token filter authorizes it (read-only) → same controller/service path → JSON back to
   Claude.
-- **Metrics:** the API pushes custom metrics to Datadog continuously via the Micrometer
-  Datadog registry. APM traces only exist while the agent + javaagent are enabled (trial).
+- **Metrics:** the deployed API pushes custom metrics to Datadog continuously via the
+  Micrometer Datadog registry — over HTTPS, no agent involved. **There is no Datadog Agent
+  in production**, so there are no production traces; APM is exercised on a local run during
+  the trial only (§6).
 
 ---
 
@@ -358,12 +369,36 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   permanently" part of the student-pack entry above: ~0.5 GB RSS does not fit beside a JVM
   in 1 GB. Custom metrics are unaffected — Micrometer pushes to the Datadog API over HTTPS
   and never needed an agent. What is lost is host infra metrics for the app box.
-- **APM, if it happens, uses the second free micro.** `dd-trace-java` needs an Agent to
-  send traces to, but that Agent does not have to be local: run it on the second E2 micro
-  and point the JVM at it with `DD_AGENT_HOST=<private IP>` over the VCN. Costs nothing,
-  keeps the app host clean, and the javaagent's own overhead (~50–100 MB) is the only thing
-  the app box pays. If even that proves too tight, the fallback is to capture APM
-  screenshots from a local run during the trial and say so plainly in the README.
+- **APM, if it happens, uses the second free micro.** *(**Superseded same day** — only one
+  instance is actually available to this tenancy. See the entry below.)*
+
+### 2026-09-01 — Only one instance; APM moves off the deployed host
+
+Written after discovering the tenancy has one usable instance, not the two the Always Free
+description implies. This supersedes the "APM uses the second free micro" bullet above.
+
+- **No Datadog Agent anywhere in production, and therefore no production APM traces.**
+  `dd-trace-java` can only send traces to an Agent, the Agent needs ~0.5 GB, and the single
+  1 GB host is already carrying a JVM at ~500 MB plus Nginx and the OS. There is nowhere
+  left to put it. Running both on the app host would push it into steady-state swapping on
+  a network-attached boot volume — the app would be visibly broken to make a screenshot.
+- **APM is exercised locally instead.** During the 14-day trial: run the app plus a Datadog
+  Agent on the laptop, drive it with the `.http` collection, capture the flame graphs and
+  the service map. This is a real, working `dd-trace-java` setup and gives genuine interview
+  material about instrumentation and trace sampling — it is simply not the deployed
+  instance, and the README says so.
+- **The claims were narrowed to match.** §1's deliverable and the resume bullet now say
+  "metrics, dashboards and alerting" for production and name APM separately as local. This
+  is the honest version: a reviewer who asks "so what does your APM show in prod?" gets a
+  straight answer instead of a walk-back.
+- **What production actually keeps:** custom metrics via Micrometer straight to the Datadog
+  API (never needed an agent), the dashboard, and the error-rate monitor. Those run
+  continuously and are what the dashboard screenshot shows. Host infra metrics for the box
+  are the casualty of having no Agent.
+- **Rejected:** paying for a bigger shape for two weeks (defeats the free-tier point for a
+  screenshot); running the Agent on the app host anyway (breaks the running app);
+  dropping Datadog entirely (metrics, dashboard and monitor all still work and are the
+  larger part of the observability story).
 
 ### 2026-09-01 — Backend scaffolded
 
