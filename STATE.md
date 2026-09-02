@@ -81,13 +81,13 @@ pointing into merged history. Harmless; delete them whenever.
    iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
    flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
 3. **`npm run preview`** on the built `dist/` — never run (the `build` step itself is green).
-   Also unverified: `deploy/nginx-jobtracker.conf` has never been through `nginx -t` —
-   nginx is not installed on this machine. Run it on the VPS before reloading.
-5. **Static assets have no response security headers.** Spring Security covers `/api`,
-   `/oauth2` and `/login`; `index.html` and the JS bundle come from Nginx and get nothing,
-   so the SPA is framable. Add `X-Frame-Options` / `nosniff` / HSTS (and ideally a CSP
-   allowing `fonts.googleapis.com` + `fonts.gstatic.com`) to the vhost before going
-   public. Called out in a comment at the top of `deploy/nginx-jobtracker.conf`.
+4. ~~**Static assets have no response security headers.**~~ **Done** —
+   `deploy/jobtracker-security-headers.conf` (HSTS, nosniff, Referrer-Policy,
+   Permissions-Policy, X-Frame-Options, CSP), included in each static location because
+   `add_header` does not inherit into a block that sets one of its own. The whole vhost was
+   run under `nginx:alpine` in Docker: `nginx -t` passes, the headers appear on `/`,
+   `/index.html` and `/assets/*`, and the rate limiter returns 429 after its burst.
+   **Re-run `nginx -t` on the VPS** once certbot has rewritten the TLS block.
 4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
    authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 

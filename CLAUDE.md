@@ -795,11 +795,50 @@ of it. Recorded here because each is a rule, not a fix.
   both directions, and was confirmed to fail (`expected:<401> but was:<200>`) with the rule
   reverted.
 
-**Still open, deliberately not done in this pass:** the SPA's static assets get no response
+**Still open, deliberately not done in this pass:** *(**Resolved** — see the entry below.)*
+the SPA's static assets get no response
 security headers. Spring Security sets `nosniff` / `X-Frame-Options: DENY` / HSTS on
 `/api`, `/oauth2` and `/login`, but `index.html` and the JS bundle are served by Nginx and
 get none, so the app is framable. A CSP must allow `fonts.googleapis.com` and
 `fonts.gstatic.com` (`index.html` loads Google Fonts). The vhost says so in a comment.
+
+### 2026-09-02 — Security headers on the static assets, and the nginx config actually run
+
+Closes the one item the security pass above left open, and stops `deploy/` being a set of
+files nobody had ever executed.
+
+- **Response security headers now cover the static half of the site**, in
+  `deploy/jobtracker-security-headers.conf`: HSTS, `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy`, `X-Frame-Options: DENY` and a CSP. Spring Security already sets its
+  own on `/api`, `/oauth2` and `/login`, so the snippet is included **only** in the static
+  locations — putting it at server level would double every header on the API responses, and
+  two `Content-Security-Policy` headers are enforced as their *intersection*, which is a
+  miserable thing to debug later.
+- **`add_header` does not merge, and that shaped the file.** A location block containing any
+  `add_header` of its own silently discards every `add_header` inherited from its parent —
+  no warning, no error. `/assets/` and `= /index.html` both set `Cache-Control`, so they
+  would have lost the entire security set had it been declared once at server level. The
+  include is therefore repeated in all three static locations. **Do not "tidy" it by
+  hoisting it.**
+- **The CSP's shape is dictated by what the app actually does.** `script-src 'self'` with no
+  `'unsafe-inline'` is achievable because the Vite build emits an external module bundle and
+  zero inline `<script>` blocks (checked against `dist/index.html`). `style-src` **does**
+  need `'unsafe-inline'`, and that is an accepted gap rather than an unnoticed one: the
+  components carry 74 inline `style={{…}}` attributes and `style-src` governs style
+  attributes as well as `<style>` blocks, so removing it means moving all 74 into
+  `theme.css` first. Inline style injection is a far weaker vector than script.
+  `fonts.googleapis.com` / `fonts.gstatic.com` are there for the webfonts `index.html`
+  links, and `*.googleusercontent.com` for the Google profile picture in the sidebar avatar.
+- **`expires 1y` and `add_header Cache-Control` together emit the header twice.** `expires`
+  generates its own `Cache-Control` and `add_header` appends rather than replaces, so
+  `/assets/` was returning both `max-age=31536000` and `public, immutable` as separate
+  headers. Found by reading real responses, not by reading the file. Now one `add_header`
+  and no `expires`.
+- **The nginx config was run, not just written.** `nginx:alpine` in Docker with a throwaway
+  self-signed cert: `nginx -t` passes, all six headers are present on `/`, `/index.html`
+  **and** `/assets/app.js` (which is the proof the inheritance handling works), and 30 rapid
+  requests to `/api` produce 21 pass-throughs followed by 429s — `burst=20` behaving exactly
+  as configured. Worth repeating on the VPS after certbot rewrites the TLS block.
 
 ---
 
