@@ -59,7 +59,9 @@ pointing into merged history. Harmless; delete them whenever.
   - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
-- **103 tests green** (`./mvnw verify`): 26 unit, 77 integration.
+- **103 tests green** (`./mvnw verify`): 25 unit, 78 integration. Verified with the local
+  `jt-mongo` container **stopped** — see the ambient-Mongo trap in §4; a green run with it
+  running proves less than it appears to.
 - **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
   proxies `/api`, `/oauth2`, `/login` → `:8080`. `src/api/` = `types.ts` (DTO mirrors),
   `client.ts` (the one `fetch` wrapper: session cookie, `X-XSRF-TOKEN` on mutations,
@@ -198,6 +200,7 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |
 | `null` in a `$lte` query | `null` is not `$lte` anything, so a document with a null field silently drops out of a range query. Load-bearing for `followUpDate` (wanted) and `lastContactAt` (a bug until it was seeded on create). |
 | OAuth success `redirect-uri` vs proxy | `oauth2Login().defaultSuccessUrl("/")` sends a root-relative `/` that, behind the Vite dev proxy, resolves against the **backend** (`:8080`) — the user lands on the bare API, hits `denyAll()`, sees a naked 403. Fix: redirect to an **absolute** URL built from `app.base-url` (`:5173` local, real origin prod). See CLAUDE.md §6. |
+| A local Mongo makes `./mvnw verify` lie | `JobTrackerApplicationTests` was a `@SpringBootTest` with no Testcontainers, so it fell back to Spring Data's default `mongodb://localhost:27017` — and passed for three phases because the dev `jt-mongo` container was listening there. `IndexInitializer` is an `ApplicationRunner`, which `@SpringBootTest` runs, so any full-context test opens a Mongo connection. The first CI run failed instantly. **`./mvnw verify` only reproduces CI if nothing is listening on 27017**: `docker stop jt-mongo` before trusting a green run. Fixed by making it `JobTrackerApplicationIT extends AbstractMongoIT`. |
 | `http2 on;` on Ubuntu 24.04 | Standalone directive from **nginx 1.25.1**; Ubuntu 24.04 ships 1.24.0, where it is `unknown directive "http2"` and nginx will not load — which also blocks `certbot --nginx`, since certbot runs `nginx -t` first. Use `listen 443 ssl http2;`. Verify configs against **`ubuntu:24.04`'s** nginx, not `nginx:alpine`, which is far newer and passes. |
 | certbot's chicken-and-egg | A vhost whose `:443` blocks have no `ssl_certificate` cannot load, and `certbot --nginx` refuses to run when `nginx -t` fails — so the certificate can never be obtained. Ship the blocks pointing at Ubuntu's `ssl-cert-snakeoil` placeholder; certbot rewrites both lines on issue. |
 | Atlas `authSource` | Adding the database name (`/jobtracker`) to satisfy Spring silently changes the **auth** database: the spec defaults `authSource` to the database in the URI, falling back to `admin` only when there is none. Atlas creates every user in `admin`. Result: `bad auth : authentication failed`, which reads as a wrong password. Append `&authSource=admin`. Tell: `SCRAM-SHA-1` in the error — Atlas negotiates SHA-256 for users it recognises, so a SHA-1 fallback means the user was not found. |

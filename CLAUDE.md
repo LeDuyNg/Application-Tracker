@@ -983,6 +983,32 @@ obvious in advance. Recorded here are the decisions; the traps are in `STATE.md 
 rejected with no error the app surfaces — a healthy service and an empty dashboard, with
 nothing linking the two. §8 and the runbook now carry the detection loop.
 
+### 2026-09-02 — The first CI run found a test that was never really passing
+
+`JobTrackerApplicationTests` failed on the first GitHub Actions run, having been green
+locally since Phase 1.
+
+- **What it was.** A `@SpringBootTest` with no Testcontainers, relying on Spring Data's
+  default `mongodb://localhost:27017`. `IndexInitializer` is an `ApplicationRunner` and
+  `@SpringBootTest` executes those, so loading the context opens a Mongo connection and
+  creates nine indexes. On a laptop with `jt-mongo` running that succeeds — **against the
+  dev database**. On a runner with no ambient Mongo the context cannot start at all.
+- **Why it survived three phases.** `./mvnw verify` is documented as the thing that
+  reproduces CI, and it does — except for state the developer's machine happens to provide.
+  A listening port is exactly that kind of state: invisible, ambient, and not expressed
+  anywhere in the build. The test was reading a real database nobody intended it to touch.
+- **Fixed as `JobTrackerApplicationIT extends AbstractMongoIT`.** A full-context test that
+  talks to Mongo is an integration test by §11's own definition; the original `*Tests` name
+  asserted "fast, no Docker", which was never true of it. Surefire 26 → 25, Failsafe 77 → 78,
+  total unchanged at 103.
+- **The general rule, now in `STATE.md §4`:** a green `./mvnw verify` only means something if
+  nothing is listening on 27017. `docker stop jt-mongo` before trusting it.
+
+**Worth noting what did the finding.** Nothing in the test suite could have caught this —
+the suite was the thing that was wrong. It took an environment that genuinely lacked the
+ambient dependency, which is the first concrete argument this project has produced for CI
+existing at all beyond convenience.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
