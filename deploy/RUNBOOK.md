@@ -297,9 +297,19 @@ Five things in that file worth understanding:
 
 ## Step 6 — systemd
 
-Create `/etc/systemd/system/jobtracker.service`:
+First confirm Java is where the unit will look for it — the Temurin package wires it up
+through `update-alternatives`, so it should be `/usr/bin/java`. If it is not, change
+`ExecStart` to match:
 
-```ini
+```bash
+command -v java        # expect /usr/bin/java
+```
+
+Now write the unit. Paste the whole block, `EOF` included — the quoted `<<'EOF'` stops the
+shell touching anything inside it:
+
+```bash
+sudo tee /etc/systemd/system/jobtracker.service >/dev/null <<'EOF'
 [Unit]
 Description=Job Application Tracker API
 After=network-online.target
@@ -334,14 +344,30 @@ ProtectHome=true
 
 [Install]
 WantedBy=multi-user.target
+EOF
 ```
+
+`tee` as root leaves it owned by `root:root` at mode 644, which is what systemd wants — the
+unit is not a secret, and the secrets it reads live in the `EnvironmentFile` from Step 5.
+
+Check it parses before relying on it:
+
+```bash
+sudo systemd-analyze verify /etc/systemd/system/jobtracker.service
+```
+
+Silence means it is fine. A complaint about `/opt/jobtracker/app.jar` is expected at this
+point — the JAR arrives in Step 7 — but anything about a malformed directive or a missing
+`EnvironmentFile` is real and worth fixing now.
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable jobtracker
 ```
 
-Do **not** start it yet — there is no JAR.
+`enable` only registers it to start at boot. Do **not** `start` it yet — there is no JAR,
+and a failed start now just means `Restart=on-failure` retries every 5 seconds until you
+notice.
 
 ---
 
