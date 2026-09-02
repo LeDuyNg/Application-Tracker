@@ -26,7 +26,7 @@ export function ApplicationTable({ rows }: { rows: ApplicationSummaryResponse[] 
         <tbody>
           {rows.map((a) => (
             <tr key={a.id}>
-              <td><Link to={`/applications/${a.id}`}>{a.companyName}</Link></td>
+              <td><Link className="link" to={`/applications/${a.id}`}>{a.companyName}</Link></td>
               <td>{a.role}</td>
               <td><StatusBadge status={a.status} /></td>
               <td>{label(a.currentStageType)}</td>

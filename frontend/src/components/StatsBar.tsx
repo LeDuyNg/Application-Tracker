@@ -48,21 +48,13 @@ function FunnelBars({ funnel }: { funnel: { stageType: string; count: number }[]
 
   return (
     <div className="card">
-      <h3>Funnel — furthest stage reached</h3>
+      <h3 className="eyebrow" style={{ marginBottom: 'var(--space-3)' }}>Funnel — furthest stage reached</h3>
       <div className="stack" style={{ gap: 'var(--space-2)' }}>
         {rows.map((r) => (
-          <div key={r.type} className="row" style={{ gap: 'var(--space-3)' }}>
+          <div key={r.type} className="row funnel-row" style={{ gap: 'var(--space-3)' }}>
             <div className="small" style={{ width: 160, textAlign: 'right' }}>{label(r.type)}</div>
-            <div style={{ flex: 1, background: 'var(--c-gray-bg)', borderRadius: 4 }}>
-              <div
-                style={{
-                  width: `${(r.count / max) * 100}%`,
-                  minWidth: 2,
-                  height: 18,
-                  background: 'var(--accent)',
-                  borderRadius: 4,
-                }}
-              />
+            <div className="funnel-track">
+              <div className="funnel-fill" style={{ width: `${(r.count / max) * 100}%`, minWidth: 2 }} />
             </div>
             <div className="small mono" style={{ width: 28 }}>{r.count}</div>
           </div>

@@ -513,16 +513,21 @@ interviews. Runs on `localhost:5173`, proxying to `localhost:8080`.
       stretch goal.
 
 ### Verification
-- [ ] With backend + local Mongo running: log in via Google (the proxy makes this work at
-      `localhost:5173`), then create a company, create an application, add stages, and
-      confirm the dashboard widgets and filters reflect it.
-- [ ] `npm run build` succeeds and `npm run preview` serves a working SPA.
-      _(`npm run build` and `npm run lint` are green as of the scaffold; `npm run preview`
-      and the browser click-through are still to do — see `STATE.md`.)_
+- [x] **Google login + logout verified in a browser** at `localhost:5173` (the Phase 2
+      criterion that was still owed). Fixed on the way: the OAuth success redirect had to
+      become an absolute URL from `app.base-url` — a root-relative `/` resolves to the bare
+      API behind the dev proxy and 403s. `POST /api/logout` → 204, "Sign out" in the shell.
+- [ ] **Full workflow not yet run** — create a company → application → stages and confirm
+      the dashboard widgets / filters / funnel reflect it. The DB is empty. This is the
+      real "Done when" bar and is still open (`STATE.md`).
+- [ ] `npm run preview` on the built `dist/` — not run. `npm run build` and `npm run lint`
+      are green.
 - [x] Read plumbing checked by curl through the proxy: `/api/me` → 401 `problem+json` +
       `XSRF-TOKEN` cookie; stats / applications / followups / interviews / companies return
       the shapes `src/api/types.ts` expects; `/oauth2/authorization/google` → 302 to Google
       with `redirect_uri=…:5173/login/oauth2/code/google`.
+- [x] Logout, auth gate + landing page, collapsible sidebar with profile block. UI is a
+      **deliberate first pass** — the owner has deferred refining it.
 
 **Done when:** you can run your real job-search workflow end-to-end in the browser locally
 — add companies and applications, log every interview stage, and the stats / follow-ups /
@@ -539,7 +544,10 @@ upcoming-interviews views are correct.
   `http://localhost:5173/login/oauth2/code/google` in the Google client, (2) set
   `spring.security.oauth2.client.registration.google.redirect-uri` to match on the `local`
   profile (Phase 2), (3) proxy `/login` in `vite.config.ts` so the callback reaches Spring,
-  and add an `AuthenticationSuccessHandler` targeting `/` so you land back on the SPA.
+  and set the OAuth `successHandler` to an **absolute** URL from `app.base-url` so you land
+  back on the SPA. **Not** a root-relative `/` — behind the proxy that resolves against
+  `:8080`, the user hits `denyAll()`, and Spring returns a bare 403 that looks exactly like
+  a failed login even though login succeeded. (Found the hard way — CLAUDE.md §6.)
 - TanStack Query caches aggressively; after a mutation you must `invalidateQueries` for the
   affected keys or the UI shows stale data.
 - Google OAuth "Testing" mode consent screen is fine for one user; you don't need to

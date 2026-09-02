@@ -56,13 +56,13 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 3 — React SPA. Scaffolded; builds and lints clean; not yet driven in a browser.** Whole SPA written on `phase-3-frontend` (Vite 8 / React 19 / TS 6). Phases 1 and 2 are merged to `main` (`75473df`), 100 tests green. Still owed from Phase 2 and now unblocked: a real Google login round trip through the SPA — plumbing verified by curl, not yet by a human. |
+| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (102 tests). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
 | **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1 and 2, merged `--no-ff` so each phase boundary is a commit. Work continues on `phase-3-frontend`. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–3, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-4-deploy`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
@@ -685,6 +685,55 @@ items (`STATE.md`).
   inline `style={{…}}` for one-offs. Deliberately unsophisticated (§3, §12).
 - **Not built, not in the Phase 3 checklist:** logout (no backend endpoint yet either —
   `STATE.md`), a toast system (errors render inline), a real mobile layout.
+
+### 2026-09-01 — Phase 3 continued: login round trip, logout, and the shell
+
+Verified Google login end to end in a browser (the Phase 2 acceptance criterion that was
+still owed), fixed what that surfaced, and reshaped the frontend around the owner's
+feedback. Merged to `main` with the UI explicitly a first pass.
+
+- **OAuth success redirect must be absolute, built from `app.base-url`.** `oauth2Login()`
+  had `.defaultSuccessUrl("/", true)`. Root-relative `/`, behind the Vite dev proxy,
+  resolves against the backend (`:8080`) — the browser landed on the bare API, hit
+  `anyRequest().denyAll()`, and got a naked 403 that read as a login failure when login had
+  in fact succeeded. Replaced with a `SimpleUrlAuthenticationSuccessHandler` pointed at
+  `appProperties.getBaseUrl() + "/"` (`http://localhost:5173/` local, the real origin in
+  prod — correct in both), `alwaysUseDefaultTargetUrl(true)` since an SPA has no meaningful
+  "page you were on". Added to `STATE.md`'s trap table.
+- **`accessDeniedHandler` added to the browser chain.** It had only `authenticationEntryPoint`.
+  An authenticated-but-forbidden request therefore fell through to Tomcat's blank 403 page
+  instead of `problem+json`. The bearer chain always wired both; this was an oversight.
+- **Logout: `POST /api/logout` → 204.** Stock Spring Security `logout()` with a
+  `HttpStatusReturningLogoutSuccessHandler(NO_CONTENT)` and `deleteCookies("JSESSIONID")`.
+  Under `/api/` so it rides the existing dev proxy and the SPA's api client (`base = /api`)
+  with no new wiring; the `LogoutFilter` runs ahead of authorization so it needs no
+  `permitAll`. CSRF-protected like any write — the api client already sends `X-XSRF-TOKEN`
+  on mutating verbs. `useLogout()` clears the React Query cache and hard-navigates to `/`.
+- **Logout tests live in their own `LogoutIT`, not in `SecurityIT`.** Adding two
+  `.with(csrf())` methods to `SecurityIT` perturbed the implicit ordering that
+  `csrfCookieIsNotDeferred` depends on ("the first request in the run emits a fresh
+  XSRF-TOKEN cookie") and it began failing with "No cookie". Both are stable apart. Noted
+  in `STATE.md`.
+- **`<App>` is now an auth gate**, not just a router: `useMe()` runs once; while it is in
+  flight a splash shows; if there is no signed-in person a dedicated `Landing` page renders
+  and **the router never mounts** — so a signed-out visitor is not bounced to Google before
+  seeing anything, which is what happened when every dashboard query fired a 401. `useMe()`
+  keeps `redirectOnUnauthorized: false`; every other call still redirects on a mid-session 401.
+- **The shell is a collapsible left sidebar**, replacing the top nav. Brand, icon nav, and
+  a designed profile block (avatar / name / email / Sign out) pinned to the foot. Collapse
+  state is remembered in `localStorage` (`jt:sidebar-collapsed`, try/catch-guarded);
+  collapsed it is a 68px icon rail with hover-label tooltips. Below 860px it is a top strip
+  and the collapse toggle is hidden.
+- **Design direction: "warm editorial".** After the owner rejected both the initial light
+  indigo ("too bright") and a dark-glass pass ("too dark, generic"), the theme settled on a
+  paper-tone ground, **Fraunces** (serif) for headings and the wordmark, Inter for UI,
+  JetBrains Mono for numbers / badges / eyebrow labels, and a single deep pine-green accent
+  with a mint gradient. Hover motion throughout (row tint + inset rule, card lift, nav
+  slide, link underline wipe). The owner has **explicitly deferred further UI work** — this
+  is a functional first pass, not the finished look. `theme.css` is the single source; no
+  framework, ~450 lines.
+- **`index.html`** loads Fraunces + Inter + JetBrains Mono from Google Fonts; new favicon
+  (pine funnel mark). `color-scheme: light`.
 
 ---
 

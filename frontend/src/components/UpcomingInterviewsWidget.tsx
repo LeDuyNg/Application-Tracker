@@ -16,7 +16,7 @@ export function UpcomingInterviewsWidget({ days = 14 }: { days?: number }) {
   if (error) return <ErrorNote error={error} prefix="Interviews" />;
 
   return (
-    <div className="card stack">
+    <div className="card stack hover">
       <h2>Upcoming interviews (next {days} days)</h2>
       {!data || data.length === 0 ? (
         <Empty>Nothing scheduled.</Empty>
@@ -29,7 +29,7 @@ export function UpcomingInterviewsWidget({ days = 14 }: { days?: number }) {
                 <span className="small nowrap">{formatDateTime(iv.scheduledAt)}</span>
               </div>
               <div className="small muted">
-                <Link to={`/applications/${iv.applicationId}`}>{iv.companyName}</Link> · {iv.role}
+                <Link className="link" to={`/applications/${iv.applicationId}`}>{iv.companyName}</Link> · {iv.role}
                 {iv.format ? ` · ${label(iv.format)}` : ''}
                 {iv.interviewers.length > 0 ? ` · ${iv.interviewers.join(', ')}` : ''}
               </div>

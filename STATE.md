@@ -26,15 +26,15 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 3 — React SPA. **Scaffolded and building; not yet verified in a
-browser.** The whole SPA is written (setup, API layer, hooks, shell, all seven pages, both
-forms, the stage timeline, plain-CSS theme). `npm run build` and `npm run lint` are green.
-What has **not** happened: nobody has opened it in a browser and clicked through — including
-the Google login round trip (see below).
-**Branch:** `phase-3-frontend`, cut from `main`.
-**`main` is at `75473df`** and contains Phases 1 and 2, merged with `--no-ff` so each phase
-boundary is a commit. `mvn verify` was run on the merge result before pushing — 100 tests
-green — so "main is deployable" is checked rather than assumed.
+**Current phase:** Phase 3 — React SPA. **Functional and merged to `main`. The UI is a
+deliberate first pass — the owner will iterate on it later.** The whole SPA is built and
+running: all seven pages, both forms, the stage timeline, a collapsible sidebar shell, a
+signed-out landing page, and Google login **verified end to end in a browser** (the owner
+logged in and back out). `./mvnw verify` and `npm run build` / `npm run lint` are green.
+**Branch:** `phase-3-frontend`, merged `--no-ff` into `main`.
+**`main`** now contains Phases 1–3, each phase boundary a merge commit. `./mvnw verify` was
+run on the Phase 3 tree before the merge — 102 tests green — so "main is deployable" stays
+checked rather than assumed.
 
 The `phase-1-backend-crud` and `phase-2-auth` branches still exist locally and on the remote,
 pointing into merged history. Harmless; delete them whenever.
@@ -52,48 +52,31 @@ pointing into merged history. Harmless; delete them whenever.
   - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
-- **100 tests green** (`./mvnw verify`): 26 unit, 74 integration across seven `*IT` classes.
-- **Phase 3 — React SPA (scaffolded, unverified in browser).** `frontend/` on Vite 8 /
-  React 19 / TS 6. `vite.config.ts` proxies `/api`, `/oauth2`, `/login` → `:8080`.
-  `src/api/` = `types.ts` (DTO mirrors), `client.ts` (the one `fetch` wrapper: session
-  cookie, `X-XSRF-TOKEN` on mutations, `ApiError`, 401→`/oauth2/authorization/google`),
-  and one TanStack Query hook per operation with cross-family invalidation after writes.
-  Seven pages (dashboard, applications list/detail/form, companies list/detail/form), both
-  entity forms on react-hook-form + zod, an inline stage add/edit timeline, plain-CSS
-  `theme.css`. `npm run build` + `npm run lint` green. Plumbing checked with curl through
-  the proxy: `/api/me`→401 `problem+json` + `XSRF-TOKEN` cookie; the four read endpoints
-  return the exact shapes `types.ts` expects; `/oauth2/authorization/google`→302 to Google
-  with `redirect_uri=http://localhost:5173/login/oauth2/code/google`.
+- **102 tests green** (`./mvnw verify`): 26 unit, 76 integration.
+- **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
+  proxies `/api`, `/oauth2`, `/login` → `:8080`. `src/api/` = `types.ts` (DTO mirrors),
+  `client.ts` (the one `fetch` wrapper: session cookie, `X-XSRF-TOKEN` on mutations,
+  `ApiError`, 401→login), one TanStack Query hook per operation with cross-family
+  invalidation after writes. `<App>` is an auth gate: splash → `Landing` (signed out) →
+  the routed app. `AppShell` is a **collapsible left sidebar** (localStorage-remembered,
+  icon rail + hover tooltips when collapsed) with a profile block (avatar / name / email /
+  **Sign out**). Seven pages, both entity forms on react-hook-form + zod, an inline stage
+  timeline. Theme: warm-editorial, Fraunces serif headings, one pine-green accent —
+  `styles/theme.css`, ~450 lines, no framework. **The visual design is a first pass the
+  owner has explicitly deferred refining.**
+- **Google login + logout verified in a browser.** The owner signed in with the allowlisted
+  account and signed back out. `POST /api/logout` → 204 (`LogoutIT` covers it).
 
-### The one thing still unverified
-**A real Google login round trip, end to end in a browser.** The plumbing is now all in
-place — the Vite dev server exists on `:5173`, `/login` and `/oauth2` are proxied, the
-`local` redirect URI points at `:5173`, `defaultSuccessUrl("/")` lands back on the SPA, and
-the 302 to Google carries the right `redirect_uri`. What is left is purely manual: run
-`docker start jt-mongo`, the backend on the `local` profile, `npm run dev` in `frontend/`,
-open `http://localhost:5173`, click **Sign in**, and confirm the top-right shows the
-signed-in email (i.e. `/api/me` returns the profile). One prerequisite outside the code:
-`http://localhost:5173/login/oauth2/code/google` must be registered as an authorized
-redirect URI on the Google OAuth client — check this in the Cloud Console if login bounces.
-Until this is done, the `.http` collection's **write** requests still cannot run (they need
-a real `JSESSIONID`). Every `GET` works via the MCP bearer token.
-
-### What's left in Phase 3
-The build is done; what remains is verification and polish, in order:
-
-1. **The browser login round trip** (above) — the one Phase 2 acceptance criterion still owed.
-2. **Actually use it.** Create a company, create an application, add stages, and confirm the
-   dashboard widgets, filters and funnel reflect the changes. `PLAN.md` Phase 3's "Done
-   when" is the real bar: run your actual job-search workflow end to end locally.
-3. **`npm run preview`** serves a working build (the `build` step itself is already green).
-4. **Not built, and not blocking:** no logout button (still no backend logout endpoint —
-   see below), no toast/notification system (mutation errors render inline via `ErrorNote`),
-   no responsive/mobile pass beyond flex-wrap. None are in `PLAN.md` Phase 3.
-
-The OAuth trap is handled: the Vite proxy forwards `/login`, the `local` redirect URI points
-at `:5173`, and `defaultSuccessUrl("/")` lands back on the SPA. The remaining risk is the
-Google Cloud Console registration of the `:5173` callback URL — verified in the code, not
-yet against Google.
+### Phase 3 loose ends (did not block the merge; pick up before or alongside Phase 4)
+1. **A full dogfooding pass.** Login works; nobody has yet run the whole workflow —
+   create a company, an application, stages — and confirmed the dashboard widgets, filters
+   and funnel all reflect it. `PLAN.md` Phase 3's "Done when" is that bar. The DB is empty.
+2. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
+   iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
+   flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
+3. **`npm run preview`** on the built `dist/` — never run (the `build` step itself is green).
+4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
+   authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 
 ### Phase 0 — one item left
 **Datadog student-pack redemption**, and the **APM-trial-availability check** inside it. That
@@ -103,10 +86,12 @@ trial is offerable means the APM screenshots have to be re-planned with the cloc
 spent.
 
 ### Gaps noticed, deliberately not built
-- **No logout endpoint / button.** Neither Phase 2 nor Phase 3 lists one in `PLAN.md`. The
-  SPA shell shows the signed-in email but no way to sign out. Still worth adding — a
-  `POST /logout` (Spring Security provides one; it needs the CSRF token) plus a button in
-  `AppShell`. Left out of the Phase 3 scaffold to stay on the checklist.
+- ~~No logout endpoint / button.~~ **Done** — `POST /api/logout` → 204 on the browser
+  chain, "Sign out" in the sidebar profile block, `useLogout()` clears the query cache and
+  hard-navigates to `/`.
+- **No refresh-token / silent re-auth.** A lapsed session drops the user to the landing
+  page on the next call (the api client redirects to Google on a 401). Fine for one user;
+  worth a note if it ever annoys.
 
 ---
 
@@ -166,6 +151,8 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `@Testcontainers` + `@Container` | Ties the container to a **test class** — it is stopped when that class ends, so every later `*IT` gets `Connection refused` against a cached port. Start it in a static initializer. |
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |
 | `null` in a `$lte` query | `null` is not `$lte` anything, so a document with a null field silently drops out of a range query. Load-bearing for `followUpDate` (wanted) and `lastContactAt` (a bug until it was seeded on create). |
+| OAuth success `redirect-uri` vs proxy | `oauth2Login().defaultSuccessUrl("/")` sends a root-relative `/` that, behind the Vite dev proxy, resolves against the **backend** (`:8080`) — the user lands on the bare API, hits `denyAll()`, sees a naked 403. Fix: redirect to an **absolute** URL built from `app.base-url` (`:5173` local, real origin prod). See CLAUDE.md §6. |
+| `SecurityIT.csrfCookieIsNotDeferred` is order-fragile | It asserts "the first request in the run emits a fresh `XSRF-TOKEN` cookie". Adding more `.with(csrf())` tests to the same class perturbs the ordering it depends on and it fails with "No cookie". Logout tests live in their own `LogoutIT` for this reason. |
 
 **General lesson:** this project runs Spring Boot 4 / Jackson 3 / Spring Data 5, and most
 material online is Boot 3. Verify property names against the config metadata in the jars

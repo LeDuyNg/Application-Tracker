@@ -5,17 +5,21 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 import dev.duynguyen.jobtracker.auth.AllowlistOidcUserService;
 import dev.duynguyen.jobtracker.auth.BearerTokenFilter;
 import dev.duynguyen.jobtracker.auth.ProblemDetailAuthHandler;
+import dev.duynguyen.jobtracker.common.AppProperties;
 
 /**
  * Two filter chains, split by credential type (CLAUDE.md §6).
@@ -88,6 +92,7 @@ public class SecurityConfig {
     @Order(2)
     SecurityFilterChain browserChain(HttpSecurity http, AllowlistOidcUserService userService,
                                      ProblemDetailAuthHandler authHandler,
+                                     AppProperties appProperties,
                                      Environment environment) throws Exception {
 
         // Since Spring Security 6 the CSRF token is generated lazily, so the XSRF-TOKEN
@@ -100,6 +105,18 @@ public class SecurityConfig {
 
         boolean local = environment.matchesProfiles("local");
 
+        // Where to send the browser after a successful Google login. It MUST be an absolute
+        // URL to the SPA's origin, not a root-relative "/". In local dev the browser sits on
+        // the Vite dev server (:5173) and only reaches Spring (:8080) through Vite's proxy;
+        // a relative "/" in the redirect resolves against :8080, landing the user on the
+        // bare API where "/" matches nothing and denyAll() returns a naked 403. `app.base-url`
+        // is http://localhost:5173 locally and the real origin in prod, so this is correct
+        // in both. `alwaysUse` because an SPA has no meaningful "the page you were on".
+        SimpleUrlAuthenticationSuccessHandler loginSuccessHandler =
+                new SimpleUrlAuthenticationSuccessHandler(
+                        appProperties.getBaseUrl().replaceAll("/+$", "") + "/");
+        loginSuccessHandler.setAlwaysUseDefaultTargetUrl(true);
+
         return http
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers("/login/**", "/oauth2/**", "/actuator/health").permitAll();
@@ -111,9 +128,9 @@ public class SecurityConfig {
                 })
                 .oauth2Login(oauth -> oauth
                         .userInfoEndpoint(userInfo -> userInfo.oidcUserService(userService))
-                        // Land back on the SPA, not on whatever the user was fetching when
-                        // the session expired.
-                        .defaultSuccessUrl("/", true)
+                        // Land back on the SPA's origin, not on a "/" that resolves to the
+                        // bare API behind the dev proxy — see loginSuccessHandler above.
+                        .successHandler(loginSuccessHandler)
                         // The default on failure is a redirect to /login?error, which on an
                         // API means a rejected account sees a 302 to a page that does not
                         // exist. Throwing OAuth2AuthenticationException alone does not change
@@ -122,10 +139,27 @@ public class SecurityConfig {
                                 authHandler.handle(request, response,
                                         new org.springframework.security.access.AccessDeniedException(
                                                 exception.getMessage(), exception))))
+                // POST /logout, protected by CSRF like any other state change — the SPA
+                // sends the X-XSRF-TOKEN header. Returns 204 rather than the default 302 to
+                // /login?logout (a page that does not exist on an API); the SPA navigates to
+                // the landing page itself once the session is gone.
+                .logout(logout -> logout
+                        // Under /api so it rides the SPA's existing dev proxy and api client
+                        // (base path /api) with no extra wiring. The LogoutFilter runs ahead
+                        // of authorization, so this needs no permitAll rule.
+                        .logoutUrl("/api/logout")
+                        .logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT))
+                        .deleteCookies("JSESSIONID"))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(csrfHandler))
-                .exceptionHandling(ex -> ex.authenticationEntryPoint(authHandler))
+                // authenticationEntryPoint: no session -> 401 problem+json (not a 302 to
+                // Google). accessDeniedHandler: an authenticated request that still fails
+                // authorization -> 403 problem+json, not Tomcat's naked 403 page. The bearer
+                // chain wires both; this one omitted the second by oversight.
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(authHandler)
+                        .accessDeniedHandler(authHandler))
                 .build();
     }
 }

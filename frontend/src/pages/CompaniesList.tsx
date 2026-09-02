@@ -32,7 +32,7 @@ export function CompaniesList() {
             <tbody>
               {data.map((c) => (
                 <tr key={c.id}>
-                  <td><Link to={`/companies/${c.id}`}>{c.name}</Link></td>
+                  <td><Link className="link" to={`/companies/${c.id}`}>{c.name}</Link></td>
                   <td>{c.industry ?? '—'}</td>
                   <td>{c.location ?? '—'}</td>
                   <td>{c.contacts.length}</td>

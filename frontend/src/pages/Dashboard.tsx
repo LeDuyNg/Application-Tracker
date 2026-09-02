@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 
 import { useApplications } from '../api/hooks/applications';
+import { useMe } from '../api/hooks/useMe';
 import { FollowupsWidget } from '../components/FollowupsWidget';
 import { StatsBar } from '../components/StatsBar';
 import { UpcomingInterviewsWidget } from '../components/UpcomingInterviewsWidget';
@@ -16,10 +17,16 @@ export function Dashboard() {
   // "Recent activity" = the newest 5 applications (the API already sorts by appliedDate desc).
   const recent = useApplications({ page: 0, size: 5 });
 
+  const me = useMe();
+  const firstName = (me.data?.name ?? '').split(' ')[0];
+
   return (
     <div className="stack" style={{ gap: 'var(--space-6)' }}>
-      <div className="spread">
-        <h1>Dashboard</h1>
+      <div className="spread page-head">
+        <div>
+          <div className="eyebrow">Overview</div>
+          <h1 style={{ margin: 0 }}>{firstName ? `Welcome back, ${firstName}` : 'Dashboard'}</h1>
+        </div>
         <Link to="/applications/new"><button className="primary">+ New application</button></Link>
       </div>
 

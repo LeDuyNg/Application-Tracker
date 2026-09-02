@@ -19,7 +19,7 @@ export function FollowupsWidget() {
   if (!data) return null;
 
   return (
-    <div className="card stack">
+    <div className="card stack hover">
       <h2>Needs chasing</h2>
 
       <section>
@@ -31,7 +31,7 @@ export function FollowupsWidget() {
             {data.due.map(({ application: a, daysOverdue }) => (
               <li key={a.id} className="spread">
                 <span>
-                  <Link to={`/applications/${a.id}`}>{a.companyName}</Link>{' '}
+                  <Link className="link" to={`/applications/${a.id}`}>{a.companyName}</Link>{' '}
                   <span className="muted small">· {a.role}</span>
                 </span>
                 <span className="small nowrap">
@@ -57,7 +57,7 @@ export function FollowupsWidget() {
             {data.goneQuiet.map(({ application: a, daysSinceContact }) => (
               <li key={a.id} className="spread">
                 <span>
-                  <Link to={`/applications/${a.id}`}>{a.companyName}</Link>{' '}
+                  <Link className="link" to={`/applications/${a.id}`}>{a.companyName}</Link>{' '}
                   <span className="muted small">· {a.role}</span>
                 </span>
                 <span className="small nowrap muted">
