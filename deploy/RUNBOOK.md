@@ -333,6 +333,17 @@ Five things in that file worth understanding:
   surfaces as a host-lookup or auth error nowhere near the password:
   `python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" 'p@ss'`.
   Easiest alternative: give the DB user an alphanumeric password.
+
+  **And it very likely needs `&authSource=admin`.** This is the sting in the tail of adding
+  the database name. Per the connection-string spec, when `authSource` is not given it
+  defaults to *the database named in the URI*, falling back to `admin` only when there is
+  none. Atlas creates every database user in `admin` — so the string Atlas hands you
+  (`.../?appName=...`, no database) authenticates fine, and the moment you insert
+  `/jobtracker` to satisfy Spring, the auth database silently becomes `jobtracker`, where the
+  user does not exist. Atlas answers `bad auth : authentication failed`, which reads as a
+  wrong password and is not one. The tell is `unable to authenticate using mechanism
+  "SCRAM-SHA-1"` in the same message: Atlas uses SCRAM-SHA-256 for users it recognises, so a
+  SHA-1 fallback means it could not find the user at all.
 - **`APP_ALLOWED_EMAILS` is the entire authorization model.** Anyone on the internet can
   start a Google login — that is Google's page, not ours — so Google only establishes *who
   someone is*. This line is what decides whether that person may use the app, checked in
@@ -527,8 +538,18 @@ To test the database credentials on their own, without starting the app:
 
 ```bash
 URI=$(sudo sed -n 's/^MONGODB_URI=//p' /etc/jobtracker/jobtracker.env)
-mongodump --uri "$URI" --collection __probe__ --archive=/dev/null && echo AUTH_OK
+mongodump --uri "$URI" --collection __probe__ --archive=/dev/null 2>&1 \
+  | sed -E 's|(//)[^:]*:[^@]*(@)|\1USER:PASS\2|'
 ```
+
+**The mask on the output is not optional.** On a connection failure `mongodump` prints the
+URI it tried — *including the password* — into your terminal, and from there into scrollback,
+a screenshot, or a support thread. Piping through that `sed` replaces the userinfo before you
+ever see it. If you have already run an unmasked probe, treat the password as disclosed and
+rotate it in Atlas → Database Access.
+
+Silence from that command means it connected. Any `bad auth` comes back with the credentials
+already masked.
 
 **Do not test it by sourcing the env file in a shell** — `set -a; . /etc/jobtracker/jobtracker.env`
 looks right and quietly lies. A systemd `EnvironmentFile` is not a shell script, and the URI
