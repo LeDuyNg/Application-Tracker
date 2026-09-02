@@ -76,9 +76,21 @@ class SecurityIT extends AbstractMongoIT {
         }
 
         @Test
-        @DisplayName("health is open; Google's login entry point is reachable")
+        @DisplayName("health is open on loopback only; Google's login entry point is reachable")
         void publicEndpoints() throws Exception {
+            // MockMvc's default remote address is 127.0.0.1, i.e. the deploy smoke check.
             mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+
+            // The same URL from anywhere else is not public. Guards the case where
+            // management.endpoint.health.show-details gets flipped to `always` while
+            // debugging — the body would then carry the Mongo wire version, the JAR's
+            // path on disk and the volume's free space.
+            mvc.perform(get("/actuator/health").with(request -> {
+                        request.setRemoteAddr("203.0.113.9");
+                        return request;
+                    }))
+                    .andExpect(status().isUnauthorized());
+
             mvc.perform(get("/oauth2/authorization/google"))
                     .andExpect(status().is3xxRedirection());
         }
