@@ -66,17 +66,17 @@ path in `CLAUDE.md §5` becomes real.
 - [x] **One instance only.** The Always Free description implies two E2 micros, but this
       tenancy has one usable. Phase 5 is planned around that: no Datadog Agent in
       production, and APM captured locally (`CLAUDE.md §6`).
-- [ ] Expect a slow first boot and slow `apt` operations — 1/8 OCPU baseline. It bursts to a
+- [x] Expect a slow first boot and slow `apt` operations — 1/8 OCPU baseline. It bursts to a
       full OCPU, which covers JVM startup and request handling; sustained CPU work is what
       it cannot do. Single-user traffic is well within it.
-- [ ] Assign a **reserved public IP** (not ephemeral) to the instance.
-- [ ] Add your SSH public key during creation; confirm `ssh ubuntu@<ip>` works.
+- [x] Assign a **reserved public IP** (not ephemeral) to the instance.
+- [x] Add your SSH public key during creation; confirm `ssh ubuntu@<ip>` works.
 - [ ] **Open ports 80 and 443** — this is two steps:
-  - [ ] VCN → Security List → add ingress rules: `0.0.0.0/0` TCP 80 and 443.
-  - [ ] On the instance: the Ubuntu image ships iptables rules that also block them —
+  - [x] VCN → Security List → add ingress rules: `0.0.0.0/0` TCP 80 and 443.
+  - [x] On the instance: the Ubuntu image ships iptables rules that also block them —
         add `iptables` ACCEPT rules for 80/443 and persist with `netfilter-persistent
         save` (exact commands go in `deploy/RUNBOOK.md` in Phase 4).
-- [ ] Add a **4 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`), and set
+- [x] Add a **4 GB swap file** (`fallocate` / `mkswap` / `swapon` + `/etc/fstab`), and set
       `vm.swappiness=10` in `/etc/sysctl.d/`. On 1 GB this is load-bearing, not a safety
       net — but the heap is sized so the app does not *live* in swap: the boot volume is
       network-attached and steady-state swapping would be painfully slow.
