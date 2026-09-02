@@ -582,30 +582,30 @@ schema and validation problems, and the app is useless for dogfooding while it's
       looks wrong, it's cheaper to fix the aggregation now than after the data is in Atlas.
 
 ### Server baseline (`deploy/RUNBOOK.md` — write it as you go)
-- [ ] DNS: A record `@` (and `www`) → the reserved public IP.
-- [ ] `apt` install: `openjdk`? no — install **Temurin 25** from the Adoptium apt repo (or
+- [x] DNS: A record `@` (and `www`) → the reserved public IP.
+- [x] `apt` install: `openjdk`? no — install **Temurin 25** from the Adoptium apt repo (or
       SDKMAN). `nginx`, `certbot`, `python3-certbot-nginx`, `rclone`,
       `mongodb-database-tools` (for `mongodump`).
-- [ ] Confirm the 4 GB swap file from Phase 0 is active (`free -m`, `swapon --show`) and
+- [x] Confirm the 4 GB swap file from Phase 0 is active (`free -m`, `swapon --show`) and
       that `vm.swappiness=10` survived a reboot.
-- [ ] Create service user `jobtracker` (no login shell); dirs `/opt/jobtracker`,
+- [x] Create service user `jobtracker` (no login shell); dirs `/opt/jobtracker`,
       `/etc/jobtracker`, `/var/www/jobtracker`, `/var/backups/jobtracker`.
-- [ ] Create a **deploy user** for CI with its own SSH key, and give it write access to
+- [x] Create a **deploy user** for CI with its own SSH key, and give it write access to
       `/opt/jobtracker` and `/var/www/jobtracker` (group ownership is enough). CI logs in
       as this user, not as `ubuntu` and not as `jobtracker`.
-- [ ] `/etc/sudoers.d/jobtracker-deploy`: a **`NOPASSWD` entry scoped to exactly**
+- [x] `/etc/sudoers.d/jobtracker-deploy`: a **`NOPASSWD` entry scoped to exactly**
       `/usr/bin/systemctl restart jobtracker` for the deploy user. Not blanket sudo. Without
       this the CI restart step fails on a password prompt — a very common first-deploy stall.
-- [ ] Basic hardening: `PasswordAuthentication no` in `sshd_config`, `unattended-upgrades`
+- [x] Basic hardening: `PasswordAuthentication no` in `sshd_config`, `unattended-upgrades`
       enabled, `fail2ban` installed. The box is on the public internet with a single
       purpose; this is 10 minutes.
-- [ ] `/etc/jobtracker/jobtracker.env` (mode 600, owner `jobtracker`): all prod env vars
+- [x] `/etc/jobtracker/jobtracker.env` (mode 600, owner `jobtracker`): all prod env vars
       from `CLAUDE.md §8` (`SPRING_PROFILES_ACTIVE=prod`, `MONGODB_URI`,
       `GOOGLE_CLIENT_ID/SECRET`, `APP_ALLOWED_EMAILS`, `APP_MCP_TOKEN`, `APP_BASE_URL`,
       `DD_API_KEY`, `DD_SITE`).
 
 ### systemd
-- [ ] `deploy/jobtracker.service`: `ExecStart=/usr/bin/java -Xmx256m -XX:MaxMetaspaceSize=128m
+- [x] `deploy/jobtracker.service`: `ExecStart=/usr/bin/java -Xmx256m -XX:MaxMetaspaceSize=128m
       -Xss512k -jar /opt/jobtracker/app.jar`, `EnvironmentFile=/etc/jobtracker/jobtracker.env`,
       `User=jobtracker`, `Restart=on-failure`, `SuccessExitStatus=143`. Install to
       `/etc/systemd/system/`, `daemon-reload`, `enable --now`.
@@ -613,66 +613,79 @@ schema and validation problems, and the app is useless for dogfooding while it's
       with nothing left for metaspace, thread stacks, code cache, Nginx and the OS.
       **SerialGC**, which the JVM already picks on a 1-core sub-2 GB machine — don't
       override it (`CLAUDE.md §6`).
-- [ ] Add `MemoryHigh=700M` and `MemoryMax=850M` to `jobtracker.service`. With 4 GB of swap
+- [x] Add `MemoryHigh=700M` and `MemoryMax=850M` to `jobtracker.service`. With 4 GB of swap
       and no cap, a runaway thrashes for a long time and takes SSH down with it; with a cap,
       the JVM alone dies and `Restart=on-failure` brings it back in seconds. Tune the
       numbers once you have seen real RSS.
-- [ ] After first deploy, check real usage: `systemctl status jobtracker` for RSS, `free -m`
+- [x] After first deploy, check real usage: `systemctl status jobtracker` for RSS, `free -m`
       for swap, and `vmstat 5` — the **`si`/`so` columns are the ones that matter**. Steady
       non-zero swap-in/out means the app is living in swap: drop `-Xmx` rather than adding
       more swap. A large `free -m` swap-used number with `si`/`so` at zero is harmless —
       that is just cold pages parked, which is exactly what swap is for.
-- [ ] Consider `-XX:TieredStopAtLevel=1` if startup is painfully slow — it trades
+- [x] Consider `-XX:TieredStopAtLevel=1` if startup is painfully slow — it trades
       steady-state throughput for faster warmup, a good deal for one user.
 
 ### Nginx + TLS
-- [ ] `deploy/nginx-jobtracker.conf`: server for `<your-domain>`; `root
+- [x] `deploy/nginx-jobtracker.conf`: server for `<your-domain>`; `root
       /var/www/jobtracker`; `location /` → `try_files $uri /index.html` (SPA routing);
       `location ~ ^/(api|oauth2|login)/` → `proxy_pass http://127.0.0.1:8080` with
       `proxy_set_header` for Host, X-Forwarded-For/Proto.
-- [ ] Security headers in the vhost: `Strict-Transport-Security` (after TLS is confirmed
+- [x] Security headers in the vhost: `Strict-Transport-Security` (after TLS is confirmed
       working), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-
       cross-origin`, `X-Frame-Options: DENY`. Plus a `limit_req` zone on `/api` — a few
       lines, and the box is publicly reachable.
-- [ ] `certbot --nginx -d <your-domain> -d www.<your-domain>`; confirm auto-renew timer.
-- [ ] Spring: set `server.forward-headers-strategy=framework` so the OAuth redirect builds
+- [x] `certbot --nginx -d <your-domain> -d www.<your-domain>`; confirm auto-renew timer.
+- [x] Spring: set `server.forward-headers-strategy=framework` so the OAuth redirect builds
       `https://` URLs behind Nginx.
 
 ### Atlas / Google
-- [ ] Confirm the VPS public IP is in the Atlas allowlist.
-- [ ] Confirm `https://<your-domain>/login/oauth2/code/google` is an authorized redirect
+- [x] Confirm the VPS public IP is in the Atlas allowlist.
+- [x] Confirm `https://<your-domain>/login/oauth2/code/google` is an authorized redirect
       URI in the Google client.
 
 ### CI/CD (`.github/workflows/`)
-- [ ] `backend.yml` on push to `main` touching `backend/**`:
+- [x] `backend.yml` on push to `main` touching `backend/**`:
       `mvn -B verify` (Testcontainers works on GitHub runners; this already produces the
       jar — don't follow it with a second `package -DskipTests` build) → `scp`
       `target/*.jar` to `/opt/jobtracker/app-<sha>.jar`, symlink `app.jar` → new file, keep
       the last 3 → `ssh sudo systemctl restart jobtracker` → poll `/actuator/health` until
       `UP` (with a timeout) to verify.
-- [ ] `frontend.yml` on push to `main` touching `frontend/**`: `npm ci` → `npm run build`
+- [x] `frontend.yml` on push to `main` touching `frontend/**`: `npm ci` → `npm run build`
       → `rsync --delete dist/` to `/var/www/jobtracker`.
-- [ ] GitHub secrets: `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`. Use a deploy-only SSH key.
-- [ ] `VITE_*` build-time config if any (base URL is same-origin `/api`, so likely none).
+- [x] GitHub secrets: `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`. Use a deploy-only SSH key.
+- [x] `VITE_*` build-time config if any (base URL is same-origin `/api`, so likely none).
 
-### Backups (`deploy/backup-mongo.*`)
-- [ ] `backup-mongo.sh`: `mongodump --uri "$MONGODB_URI" --archive --gzip` →
+### Backups (`deploy/backup-mongo.*`) — **DEFERRED, not done**
+
+> Deferred by decision on 2026-09-02. Atlas M0 has no automated backups, no undelete and
+> no point-in-time restore, so until this is picked up the job search lives in exactly one
+> place — and `CLAUDE.md §3` names this cron as the reason M0 was acceptable over
+> self-hosting at all, which leaves that argument currently unbacked. Items below are
+> marked `[~]` rather than `[ ]` so the phase does not read as merely unfinished.
+> `deploy/RUNBOOK.md` Step 12 carries a one-line manual `mongodump` as an interim.
+- [~] `backup-mongo.sh`: `mongodump --uri "$MONGODB_URI" --archive --gzip` →
       `/var/backups/jobtracker/jobtracker-$(date +%F).archive.gz`; `rclone copy` to Oracle
       Object Storage (free 20 GB); delete local archives older than 14 days.
-- [ ] `backup-mongo.service` + `backup-mongo.timer` (daily). `systemctl enable --now`.
+- [~] `backup-mongo.service` + `backup-mongo.timer` (daily). `systemctl enable --now`.
       The service runs `User=jobtracker` with
       `EnvironmentFile=/etc/jobtracker/jobtracker.env` — that's where `MONGODB_URI` comes
       from; the script must not carry its own copy of the credentials.
-- [ ] Configure `rclone` for Oracle Object Storage (S3-compatible). **Make the bucket
+- [~] Configure `rclone` for Oracle Object Storage (S3-compatible). **Make the bucket
       private** and confirm it — the dumps contain recruiter names, emails and phone
       numbers, plus your own comp expectations.
-- [ ] **Test a restore** into a scratch database and diff a few docs. Record the restore
+- [~] **Test a restore** into a scratch database and diff a few docs. Record the restore
       steps in `RUNBOOK.md`.
 
 **Done when:** `https://<your-domain>` loads the SPA; Google login works; you can do full
 CRUD against the live app; pushing to `main` auto-deploys within a few minutes;
-`/actuator/health` is `UP`; a backup archive has landed in Object Storage and a test
-restore succeeded. **You start entering real applications.**
+`/actuator/health` is `UP`. ~~a backup archive has landed in Object Storage and a test
+restore succeeded~~ — **deferred, see above**. **You start entering real applications.**
+
+**Status (2026-09-02): met, except backups and the backfill.** Live at
+`https://app4jobtrack.me`, TLS via certbot, both GitHub Actions workflows deploying from
+`main`, health `UP`, Datadog metrics flowing. Still open: the backfill at the top of this
+phase was skipped, so the app is deployed but empty — that and the Phase 3 dogfooding pass
+are the remaining work before this phase is genuinely finished.
 
 **Gotchas:**
 - Oracle's double firewall (Security List **and** instance iptables) is the #1 "site

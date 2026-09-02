@@ -26,7 +26,14 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 3 — React SPA. **Functional and merged to `main`. The UI is a
+**Current phase:** **Phase 4 — Deploy. Done. The app is live at
+`https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0,
+and both GitHub Actions workflows deploying from `main`. Health `UP`, Datadog metrics
+flowing to **US5**. Two things deliberately not done: **backups** (deferred, `RUNBOOK.md`
+Step 12) and the **backfill**, so the live app is empty. Next is Phase 5 — Datadog
+dashboard + alert; branch `phase-5-datadog`.
+
+*Previously:* Phase 3 — React SPA. **Functional and merged to `main`. The UI is a
 deliberate first pass — the owner will iterate on it later.** The whole SPA is built and
 running: all seven pages, both forms, the stage timeline, a collapsible sidebar shell, a
 signed-out landing page, and Google login **verified end to end in a browser** (the owner
@@ -66,6 +73,18 @@ pointing into merged history. Harmless; delete them whenever.
   owner has explicitly deferred refining.**
 - **Google login + logout verified in a browser.** The owner signed in with the allowlisted
   account and signed back out. `POST /api/logout` → 204 (`LogoutIT` covers it).
+- **Phase 4 — deploy.** Live at `https://app4jobtrack.me`. Oracle `VM.Standard.E2.1.Micro`
+  (Ubuntu 24.04, 4 GB swap), Temurin 25 JRE, systemd `jobtracker.service` with `-Xmx256m`
+  and `MemoryHigh/Max` caps, Nginx + certbot with the security-header snippet and rate
+  limiting, Atlas M0 over `authSource=admin`, three identities (`ubuntu` / `deploy` /
+  `jobtracker`) with sudo scoped to one command. `deploy/RUNBOOK.md` is the full record,
+  written and corrected as the deploy happened rather than after.
+- **CI/CD.** `.github/workflows/backend.yml` and `frontend.yml`, path-filtered, deploying
+  on push to `main`. The backend workflow SHA-names each JAR, repoints the `app.jar`
+  symlink, keeps the newest three as the rollback, and gates on `/actuator/health` polled
+  **over ssh on the box** — the endpoint is loopback-only, so a runner curling the public
+  URL would 401 and fail every deploy.
+- **Datadog metrics reaching the platform**, agentless via Micrometer, on site **US5**.
 - **Pre-deploy security pass (2026-09-02).** Full read of backend + frontend for security
   flaws. Core auth model held up; six changes applied — URL scheme allowlist on
   `jobPostingUrl` / `website` at both ends (stored-XSS sink), `app.mcp-token` local default
@@ -73,10 +92,15 @@ pointing into merged history. Harmless; delete them whenever.
   `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
   `/actuator/health` narrowed to loopback callers. **103 tests green.** Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
 
-### Phase 3 loose ends (did not block the merge; pick up before or alongside Phase 4)
-1. **A full dogfooding pass.** Login works; nobody has yet run the whole workflow —
-   create a company, an application, stages — and confirmed the dashboard widgets, filters
-   and funnel all reflect it. `PLAN.md` Phase 3's "Done when" is that bar. The DB is empty.
+### Open, after Phase 4
+1. **The backfill, and a full dogfooding pass.** Still the biggest gap, and now the *only*
+   thing between here and using the app for real. `PLAN.md` Phase 4 puts the backfill first
+   for a reason — it is the cheapest place to find schema and validation problems — and it
+   was skipped in the rush to deploy. **The live database is empty.** Do it against the
+   deployed app now rather than locally; that also serves as the dogfooding pass.
+2. **Backups are deferred**, not done. Atlas M0 has no automated backup, no undelete and no
+   point-in-time restore, so the moment real data goes in, it exists in exactly one place.
+   Worth reconsidering *before* the backfill rather than after. `RUNBOOK.md` Step 12.
 2. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
    iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
    flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
@@ -174,6 +198,13 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |
 | `null` in a `$lte` query | `null` is not `$lte` anything, so a document with a null field silently drops out of a range query. Load-bearing for `followUpDate` (wanted) and `lastContactAt` (a bug until it was seeded on create). |
 | OAuth success `redirect-uri` vs proxy | `oauth2Login().defaultSuccessUrl("/")` sends a root-relative `/` that, behind the Vite dev proxy, resolves against the **backend** (`:8080`) — the user lands on the bare API, hits `denyAll()`, sees a naked 403. Fix: redirect to an **absolute** URL built from `app.base-url` (`:5173` local, real origin prod). See CLAUDE.md §6. |
+| `http2 on;` on Ubuntu 24.04 | Standalone directive from **nginx 1.25.1**; Ubuntu 24.04 ships 1.24.0, where it is `unknown directive "http2"` and nginx will not load — which also blocks `certbot --nginx`, since certbot runs `nginx -t` first. Use `listen 443 ssl http2;`. Verify configs against **`ubuntu:24.04`'s** nginx, not `nginx:alpine`, which is far newer and passes. |
+| certbot's chicken-and-egg | A vhost whose `:443` blocks have no `ssl_certificate` cannot load, and `certbot --nginx` refuses to run when `nginx -t` fails — so the certificate can never be obtained. Ship the blocks pointing at Ubuntu's `ssl-cert-snakeoil` placeholder; certbot rewrites both lines on issue. |
+| Atlas `authSource` | Adding the database name (`/jobtracker`) to satisfy Spring silently changes the **auth** database: the spec defaults `authSource` to the database in the URI, falling back to `admin` only when there is none. Atlas creates every user in `admin`. Result: `bad auth : authentication failed`, which reads as a wrong password. Append `&authSource=admin`. Tell: `SCRAM-SHA-1` in the error — Atlas negotiates SHA-256 for users it recognises, so a SHA-1 fallback means the user was not found. |
+| `DD_SITE` mismatch | Datadog runs several sites (`datadoghq.com` = US1, `us3`, `us5`, `datadoghq.eu`, `ap1`) and a key is valid only on its own. A mismatch is rejected with no error the app surfaces and no data in the UI — a healthy service and an empty dashboard, with nothing connecting the two. This org is **US5**. Diagnose with `curl https://api.<site>/api/v1/validate -H "DD-API-KEY: …"`. |
+| Sourcing an `EnvironmentFile` in bash | `set -a; . jobtracker.env` looks like a fair way to test config and lies: it is not a shell script, and `MONGODB_URI` contains `&`, which bash reads as "run in background". The assignment truncates and vanishes, `$MONGODB_URI` is empty, and the probe fails against `localhost` — a completely different fault from the one being chased. systemd's parser is unaffected, so this only ever misleads diagnosis. |
+| `mongodump` prints the URI on failure | Password included, straight into scrollback. Pipe probe output through `sed -E 's\|(//)[^:]*:[^@]*(@)\|\1USER:PASS\2\|'`. |
+| `ssh user@ip` vs a `Host` alias | A `~/.ssh/config` `Host myalias` block matches the **alias**, not the address inside it. `ssh ubuntu@<ip>` matches nothing, falls back to default identities, and fails `Permission denied (publickey)` on a box reachable a second earlier by alias. |
 | `SecurityIT.csrfCookieIsNotDeferred` is order-fragile | It asserts "the first request in the run emits a fresh `XSRF-TOKEN` cookie". Adding more `.with(csrf())` tests to the same class perturbs the ordering it depends on and it fails with "No cookie". Logout tests live in their own `LogoutIT` for this reason. |
 
 **General lesson:** this project runs Spring Boot 4 / Jackson 3 / Spring Data 5, and most

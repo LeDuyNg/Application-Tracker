@@ -59,13 +59,13 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (103 tests). A pre-deploy security pass has been applied (§6, 2026-09-02). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
+| **Current phase** | **Phase 4 — Deploy. Done; live at `https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0, GitHub Actions deploying from `main`, health `UP`, Datadog metrics on **US5**. Deliberately not done: **backups** (deferred) and the **backfill**, so the live app is empty. Next is Phase 5 — Datadog dashboard + alert. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
-| **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–3, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-4-deploy`. |
+| **Live URL** | **`https://app4jobtrack.me`** — live since 2026-09-02. Deploy record: `deploy/RUNBOOK.md`. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–4, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-5-datadog`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
@@ -939,6 +939,49 @@ session should not have to guess whether it was ever considered.
   backups currently deferred. Mostly obligation, very little engineering signal.
 - **If this is ever revisited**, the allowlisted-but-private variant is the one to build:
   real multi-tenancy with no abuse surface. Open signup is not.
+
+### 2026-09-02 — Phase 4: deployed
+
+Live at `https://app4jobtrack.me`. The runbook (`deploy/RUNBOOK.md`) was written before the
+deploy and corrected *during* it, which is why it now contains several things that were not
+obvious in advance. Recorded here are the decisions; the traps are in `STATE.md §4`.
+
+- **Three identities on the box, and sudo scoped to one command.** `ubuntu` is a person,
+  `deploy` is CI, `jobtracker` runs the JVM and owns the secrets with no login shell. CI's
+  sudoers entry permits exactly `systemctl restart jobtracker`. The cost of this shows up
+  immediately — the `deploy` account needs its SSH key installed *through* `ubuntu`, since
+  `ssh-copy-id` cannot authenticate as an account that has no key yet — and it is still the
+  right shape: a leaked CI key restarts a service, it does not own the box.
+- **Ordering in the runbook was wrong twice, in the same way.** Atlas access was Step 9 but
+  the app cannot boot without it (Step 7), and the deploy key was Step 11 but Step 7 uses it.
+  Both were found by hitting them. The general lesson: a runbook's numbering encodes a
+  dependency graph, and writing it linearly hides the edges.
+- **`/actuator/health` being loopback-only shaped the CI gate.** The deploy workflow polls
+  health *over ssh on the box* rather than from the runner, because the endpoint is not
+  publicly reachable by design (2026-09-02 security pass) and Nginx does not proxy
+  `/actuator`. A runner curling the public URL would 401 and fail every deploy. Worth noting
+  as a case where a security decision correctly constrained a later design rather than being
+  worked around.
+- **The deploy gate is health, not systemd.** `systemctl restart` returning says the process
+  started, not that the app works — on this box those are ~40 seconds apart, and every
+  failure so far (Mongo auth, Datadog key) happened *after* Tomcat was already listening.
+  The workflow polls for up to 180s and fails the deploy if health never reports `UP`.
+- **Rollback is the JAR symlink.** Each deploy uploads `app-<sha>.jar` and repoints
+  `app.jar`; the three newest are kept. With no Docker there is no image tag, so this is the
+  rollback story in full — a decision from 2026-09-01 that only becomes concrete here.
+- **Backups deferred, deliberately and with the cost written down.** M0 has no automated
+  backup, no undelete and no point-in-time restore. `CLAUDE.md §3` names the `mongodump`
+  cron as the reason M0 was acceptable over self-hosting, so that argument is currently
+  unbacked. `PLAN.md` Phase 4's backup items are marked `[~]` rather than left unticked so
+  the phase does not read as merely unfinished.
+- **The backfill was skipped**, so the live app is empty. `PLAN.md` puts it first in Phase 4
+  precisely because it is the cheapest place to find schema and validation problems, and
+  deploying first inverted that. It is now the main thing standing between a working
+  deployment and actually using it.
+
+**Datadog is on site US5, not US1.** A key is valid only on its own site and a mismatch is
+rejected with no error the app surfaces — a healthy service and an empty dashboard, with
+nothing linking the two. §8 and the runbook now carry the detection loop.
 
 ---
 
