@@ -223,6 +223,31 @@ sudo chmod 600 /etc/jobtracker/jobtracker.env
 sudo chown jobtracker:jobtracker /etc/jobtracker/jobtracker.env
 ```
 
+### Coming back to edit this file
+
+You will. It is mode 600 owned by `jobtracker`, so:
+
+```bash
+sudo cat  /etc/jobtracker/jobtracker.env      # look
+sudo nano /etc/jobtracker/jobtracker.env      # edit
+
+# Then always re-assert this. Some editors write a new file and rename it over the old
+# one, which silently leaves it owned by root. The service runs as `jobtracker` and then
+# cannot read its own config — and the failure does not say "permission denied", it looks
+# like every variable is unset, which sends you hunting in completely the wrong place.
+sudo chown jobtracker:jobtracker /etc/jobtracker/jobtracker.env
+sudo chmod 600 /etc/jobtracker/jobtracker.env
+ls -l /etc/jobtracker/jobtracker.env          # -rw------- 1 jobtracker jobtracker
+```
+
+Two rules for the contents: **no spaces around `=` and no quotes** unless the value contains
+`#`, in which case single-quote the whole value or systemd reads the rest of the line as a
+comment. And **do not edit it with `sed -i` from the command line** — it works, but the
+password ends up in your shell history.
+
+Once the service is running, `EnvironmentFile` is read only at process start, so any edit
+here needs `sudo systemctl restart jobtracker`. A `daemon-reload` alone will not pick it up.
+
 Generate the MCP token **on the VPS**, straight into the file — the token never appears on
 screen, and the shell records the literal `$(openssl rand -hex 32)` rather than what it
 expanded to, so it stays out of history and scrollback:
