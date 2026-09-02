@@ -137,6 +137,50 @@ class MetricsIT extends AbstractMongoIT {
         }
 
         @Test
+        @DisplayName("the seeded APPLICATION_SUBMITTED stage is counted too")
+        void createdApplicationCountsItsSeededStage() throws Exception {
+            // create() seeds an APPLICATION_SUBMITTED stage without going through addStage().
+            // Instrumenting only addStage() undercounted every application by one, and left
+            // the dashboard's stage widget reading "no data" after a backfill.
+            double before = count("jobtracker.stages.added", "stage_type", "APPLICATION_SUBMITTED");
+            createApplication(createCompany("Vercel"));
+            assertThat(count("jobtracker.stages.added", "stage_type", "APPLICATION_SUBMITTED"))
+                    .isEqualTo(before + 1);
+        }
+
+        @Test
+        @DisplayName("an application created with its stages supplied counts every one")
+        void suppliedStagesAreAllCounted() throws Exception {
+            // The backfill shape: stages arrive attached to the create, so create() takes its
+            // buildStages() branch and never touches addStage(). This counted zero.
+            String companyId = createCompany("Figma");
+            double submitted = count("jobtracker.stages.added", "stage_type", "APPLICATION_SUBMITTED");
+            double screen = count("jobtracker.stages.added", "stage_type", "RECRUITER_SCREEN");
+
+            mvc.perform(post("/api/applications").with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "companyId": "%s",
+                                      "role": "Product Engineer",
+                                      "appliedDate": "%s",
+                                      "source": "REFERRAL",
+                                      "stages": [
+                                        { "type": "APPLICATION_SUBMITTED", "status": "PASSED",
+                                          "completedAt": "2026-08-01T12:00:00Z" },
+                                        { "type": "RECRUITER_SCREEN", "status": "PASSED",
+                                          "completedAt": "2026-08-08T12:00:00Z" }
+                                      ]
+                                    }""".formatted(companyId, time.today())))
+                    .andExpect(status().isCreated());
+
+            assertThat(count("jobtracker.stages.added", "stage_type", "APPLICATION_SUBMITTED"))
+                    .isEqualTo(submitted + 1);
+            assertThat(count("jobtracker.stages.added", "stage_type", "RECRUITER_SCREEN"))
+                    .isEqualTo(screen + 1);
+        }
+
+        @Test
         @DisplayName("an error response increments jobtracker.api.errors, tagged by status")
         void apiErrorsIsTaggedByStatus() throws Exception {
             double before = count("jobtracker.api.errors", "status", "404");

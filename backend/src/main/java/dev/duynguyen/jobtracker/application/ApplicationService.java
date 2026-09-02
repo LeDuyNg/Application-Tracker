@@ -91,6 +91,16 @@ public class ApplicationService {
         // and a counter that includes rejected attempts measures the client rather than the
         // job search.
         applicationsCreated.increment();
+
+        // And count the stages this created. Easy to miss, because the obvious place to
+        // instrument stage creation is addStage() — but create() makes stages too, by both
+        // of its branches: the seeded APPLICATION_SUBMITTED when none are supplied, and the
+        // caller's own list when they are. Instrumenting only addStage() undercounts every
+        // application by at least one, and a backfilled application that arrives with four
+        // stages attached counts zero. That is the same trap as the lastContactAt bug in
+        // CLAUDE.md §6 — a rule hung on one branch of create() while the other does the
+        // same work silently.
+        countStages(a.getStages());
         return created;
     }
 
@@ -146,12 +156,7 @@ public class ApplicationService {
         syncDerivedFields(a);
         ApplicationResponse updated = mapper.toResponse(applications.save(a));
 
-        // Tagged by type, which is what makes a funnel possible: 14 possible values, all
-        // from a closed enum, so the cardinality cannot drift (MetricsConfig). Resolved per
-        // call because the tag value varies; Micrometer caches by meter id, so this is a
-        // map lookup rather than a registration.
-        metrics.counter("jobtracker.stages.added", "stage_type", stage.getType().name())
-                .increment();
+        countStages(List.of(stage));
         return updated;
     }
 
@@ -277,6 +282,25 @@ public class ApplicationService {
     }
 
     // ------------------------------------------------------------- Helpers
+
+    /**
+     * Counts stages as they come into existence, whichever path created them.
+     *
+     * <p>Tagged by type, and that tag is safe: {@code StageType} is a closed enum of 14
+     * values, so the cardinality is bounded by the schema rather than by user input
+     * ({@code MetricsConfig}). Resolved per call rather than cached in a field because the
+     * tag value varies; Micrometer looks the meter up by id, so this is a map lookup, not a
+     * registration.
+     *
+     * <p><strong>Every path that creates a stage must call this</strong> — there are two,
+     * and they are not adjacent: {@link #addStage} and {@link #create}.
+     */
+    private void countStages(List<Stage> stages) {
+        for (Stage stage : stages) {
+            metrics.counter("jobtracker.stages.added", "stage_type", stage.getType().name())
+                    .increment();
+        }
+    }
 
     private void applyOwnFields(Application a, String role, java.time.LocalDate appliedDate,
                                 dev.duynguyen.jobtracker.common.enums.ApplicationSource source,
