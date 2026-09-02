@@ -8,7 +8,7 @@
 > `/actuator` not proxied). Update this file **as you go**, not afterwards.
 
 Target: `https://app4jobtrack.me` serving the SPA and API, auto-deployed from `main`, with
-a nightly off-box backup.
+a nightly off-box backup (backups deferred for now — Step 12).
 
 **Substitute throughout:** `app4jobtrack.me` → your domain, `<VPS_IP>` → the reserved public
 IP, `<ATLAS_URI>` → your Atlas SRV string.
@@ -142,7 +142,8 @@ The **JRE**, not the JDK — nothing compiles on this box and the JDK is wasted 
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx rclone fail2ban unattended-upgrades
-# mongodump, for backups:
+# mongodump/mongorestore. Not needed today — Step 12 is deferred — but it is a 30-second
+# install now versus a remembered errand later, and Step 12's interim manual dump wants it.
 wget -qO - https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg --dearmor -o /etc/apt/keyrings/mongodb.gpg
 echo "deb [signed-by=/etc/apt/keyrings/mongodb.gpg] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" \
   | sudo tee /etc/apt/sources.list.d/mongodb.list
@@ -177,6 +178,8 @@ slowly instead of dying; it does not make 1 GB behave like 5 GB.
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin jobtracker
 sudo useradd --create-home --shell /bin/bash deploy          # CI logs in as this user
 
+# /var/backups/jobtracker is unused while Step 12 is deferred; created anyway so that
+# picking backups back up is a matter of dropping in the script and the timer.
 sudo mkdir -p /opt/jobtracker /etc/jobtracker /var/www/jobtracker /var/backups/jobtracker
 sudo chown -R jobtracker:jobtracker /opt/jobtracker /etc/jobtracker /var/backups/jobtracker
 
@@ -234,16 +237,17 @@ Four traps in that file:
 - **`APP_MCP_TOKEN` empty means the MCP server cannot authenticate.** That is the intended
   fail-closed default, not a bug. Fill it before Phase 6.
 - **`APP_BASE_URL` has no trailing slash** and must be the **apex**, matching Google exactly.
-- **`DD_API_KEY` empty will stop the app from booting.** `application-prod.yml` enables the
-  Micrometer Datadog registry, and it auto-configures on classpath presence alone and
-  refuses to start without a key — `apiKey was 'null' but it is required` (`CLAUDE.md §6`).
-  Datadog student-pack redemption is still an open Phase 0 item, so **assume you do not have
-  a key yet** and take one of these before Step 7:
-  - set `MANAGEMENT_DATADOG_METRICS_EXPORT_ENABLED=false` in the env file, and delete it
-    again in Phase 5 — recommended, it keeps Phase 4 and Phase 5 independent; or
-  - redeem the student pack now and paste in a real key.
+- **`DD_API_KEY` must hold the real key** — Phase 0 is complete and one is generated, so
+  paste it in along with `DD_SITE`. Metrics then start flowing from the first boot;
+  Micrometer pushes straight to the Datadog API over HTTPS and needs no Agent, so this is
+  safe to have on during the deploy.
 
-  Do not discover this at Step 7 with the service failing to start and no obvious cause.
+  **If you leave it blank the app will not start at all.** `application-prod.yml` enables
+  the Micrometer Datadog registry, which auto-configures on classpath presence alone and
+  refuses to boot without a key — `apiKey was 'null' but it is required` (`CLAUDE.md §6`).
+  The failure looks nothing like a Datadog problem, so if the service dies at Step 7 with an
+  opaque startup error, check this line first. The escape hatch, if you ever want the app up
+  without Datadog, is `MANAGEMENT_DATADOG_METRICS_EXPORT_ENABLED=false` in the same file.
 
 ---
 
@@ -468,77 +472,32 @@ targets are the rollback (`CLAUDE.md §6`).
 
 ---
 
-## Step 12 — Backups
+## Step 12 — Backups — **deferred, not done**
 
-M0 has **no automated backups**. This is the only copy of the data.
+Removed from this runbook by decision, 2026-09-02. Recorded rather than silently dropped,
+because the exposure is specific:
 
-`/opt/jobtracker/backup-mongo.sh` (owner `jobtracker`, mode 750):
+**Atlas M0 has no automated backups of any kind.** Until this step is done, the job search
+lives in exactly one place, and `CLAUDE.md §3` names the `mongodump` cron as the reason M0
+was acceptable over self-hosting at all — that argument is currently unbacked. There is no
+undelete and no point-in-time restore on M0; an accidental `DELETE /api/applications/{id}`
+or a dropped collection is permanent.
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-# MONGODB_URI comes from the EnvironmentFile — never hardcode credentials here.
-: "${MONGODB_URI:?MONGODB_URI not set}"
-DEST=/var/backups/jobtracker
-ARCHIVE="$DEST/jobtracker-$(date +%F).archive.gz"
-mkdir -p "$DEST"
-mongodump --uri "$MONGODB_URI" --archive="$ARCHIVE" --gzip
-rclone copy "$ARCHIVE" oracle:jobtracker-backups/
-find "$DEST" -name 'jobtracker-*.archive.gz' -mtime +14 -delete
-echo "backup complete: $ARCHIVE"
-```
-
-`/etc/systemd/system/backup-mongo.service`:
-
-```ini
-[Unit]
-Description=Nightly mongodump of the jobtracker database
-
-[Service]
-Type=oneshot
-User=jobtracker
-EnvironmentFile=/etc/jobtracker/jobtracker.env
-ExecStart=/opt/jobtracker/backup-mongo.sh
-```
-
-`/etc/systemd/system/backup-mongo.timer`:
-
-```ini
-[Unit]
-Description=Run the jobtracker backup nightly
-
-[Timer]
-OnCalendar=daily
-Persistent=true
-RandomizedDelaySec=1h
-
-[Install]
-WantedBy=timers.target
-```
+Cheap interim measure, if you want one before the real thing:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now backup-mongo.timer
-sudo systemctl start backup-mongo.service     # run once now
-journalctl -u backup-mongo.service -n 30
+mongodump --uri "<ATLAS_URI>" --archive=~/jobtracker-$(date +%F).archive.gz --gzip
 ```
 
-Configure `rclone` for Oracle Object Storage (S3-compatible) as remote `oracle`:
-`rclone config` → `s3` → provider `Other` → your Customer Secret Key + the region endpoint.
+Run it by hand now and then and keep the file off the laptop's only disk. Thirty seconds,
+and it converts "no copy" into "a stale copy", which is a different category of problem.
 
-**Make the bucket private and confirm it.** The dumps contain recruiter names, emails and
-phone numbers, plus your own compensation expectations.
+**To restore this step in full** — the `backup-mongo.sh` script, the systemd service and
+timer, the rclone/Object Storage setup and the restore test — see `PLAN.md` Phase 4
+"Backups", or `git show <commit-before-this-one>:deploy/RUNBOOK.md`.
 
-### Test the restore — before you rely on it
-
-```bash
-mongorestore --uri "<ATLAS_URI>" \
-  --archive=/var/backups/jobtracker/jobtracker-$(date +%F).archive.gz --gzip \
-  --nsFrom 'jobtracker.*' --nsTo 'jobtracker_restoretest.*'
-```
-
-Open `jobtracker_restoretest` in the IntelliJ Database tool window, diff a few documents
-against the live collections, then drop it. An untested backup is not a backup.
+> Note the bucket must be **private** when this is picked back up. The dumps contain
+> recruiter names, emails and phone numbers, plus your own compensation expectations.
 
 ---
 
@@ -551,7 +510,7 @@ against the live collections, then drop it. An untested backup is not a backup.
 - [ ] `https://www.app4jobtrack.me/` 301s to the apex
 - [ ] `/api/companies` unauthenticated returns 401; `/actuator/health` is not public
 - [ ] Push to `main` auto-deploys within a few minutes
-- [ ] A backup archive is in Object Storage **and a test restore succeeded**
+- [ ] ~~A backup archive is in Object Storage and a test restore succeeded~~ — **deferred**, see Step 12
 - [ ] You are entering real applications
 
 ---
