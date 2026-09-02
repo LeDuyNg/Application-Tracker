@@ -4,7 +4,10 @@ import java.util.List;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+
+import dev.duynguyen.jobtracker.common.Validation;
 
 /**
  * Body of {@code PUT /api/companies/{id}} — a full replacement, so every field is sent and
@@ -18,10 +21,11 @@ import jakarta.validation.constraints.Size;
 public record UpdateCompanyRequest(
 
         @NotBlank @Size(max = 120) String name,
-        @Size(max = 500) String website,
+        @Size(max = 500) @Pattern(regexp = Validation.HTTP_URL,
+                message = Validation.HTTP_URL_MESSAGE) String website,
         @Size(max = 120) String industry,
         @Size(max = 200) String location,
-        @Valid List<ContactRequest> contacts,
+        @Size(max = 20) List<@Valid ContactRequest> contacts,
         @Size(max = 5000) String notes,
-        List<@Size(max = 40) String> tags
+        @Size(max = 20) List<@Size(max = 40) String> tags
 ) {}

@@ -29,7 +29,7 @@ springdoc:
 
 app:
   allowed-emails: ${APP_ALLOWED_EMAILS:}
-  mcp-token: ${APP_MCP_TOKEN:local-dev-token-change-me}
+  mcp-token: ${APP_MCP_TOKEN:}
   base-url: http://localhost:5173
 
 logging:

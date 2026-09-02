@@ -21,10 +21,11 @@ Four deliverables, all built around one data store:
 
 1. **CRUD app** — Spring Boot REST API + React dashboard over MongoDB.
 2. **Datadog integration** — custom metrics + a dashboard + one alert, against the
-   *deployed* instance, plus APM traces captured from a **local** run during the 14-day
-   trial. The 1 GB host cannot carry the Datadog Agent alongside the JVM, and only one
-   instance is available — see §6. Say which is which; a smaller true claim beats a vague
-   larger one.
+   *deployed* instance. **No APM, anywhere**: it is a separately-billed SKU with no trial
+   offerable on the student Pro plan, and the 1 GB host could not carry the Agent beside
+   the JVM in any case (§6, 2026-09-02). Metrics reach Datadog over HTTPS via Micrometer
+   and never needed an Agent, so this deliverable is unaffected. A smaller true claim
+   beats a vague larger one.
 3. **MCP server** — a thin, read-only layer letting Claude Desktop answer natural-language
    questions about the job search ("how many applications this month?", "what interviews
    do I have this week?").
@@ -45,10 +46,12 @@ Four deliverables, all built around one data store:
 > MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
 > natural-language queries over application status and interview stages via Claude Desktop.
 
-*(Says "metrics, dashboards and alerting", not "APM": those are what run continuously
-against the deployed instance. APM tracing is exercised locally during the trial and is
-worth discussing in an interview — but claiming it as a production capability would not
-survive a follow-up question.)*
+*(Says "metrics, dashboards and alerting", not "APM", and that is the whole claim — there
+is no tracing in this project, locally or in production (§6, 2026-09-02). The bullet was
+written this way before that was forced, which is why it needed no edit when it was.
+"Why no APM?" has a real answer worth giving in an interview: a 1 GB host, an Agent needing
+~0.5 GB beside a JVM already at ~500 MB, one instance in the tenancy, and a separately-billed
+tracing SKU.)*
 
 ---
 
@@ -56,16 +59,16 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (102 tests). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
-| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
+| **Current phase** | **Phase 4 — Deploy. Done; live at `https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0, GitHub Actions deploying from `main`, health `UP`, Datadog metrics on **US5**. Deliberately not done: **backups** (deferred) and the **backfill**, so the live app is empty. Next is Phase 5 — Datadog dashboard + alert. See `STATE.md`. |
+| **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
-| **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–3, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-4-deploy`. |
+| **Live URL** | **`https://app4jobtrack.me`** — live since 2026-09-02. Deploy record: `deploy/RUNBOOK.md`. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–4, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-5-datadog`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
-| **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
+| **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
 
 Update this table at the end of every working session.
 
@@ -76,14 +79,13 @@ Update this table at the end of every working session.
 ### Backend
 | Thing | Choice | Notes |
 |---|---|---|
-| Language | **Java 25 (LTS)** | GA Sep 2025. `dd-trace-java` fully supports it. |
+| Language | **Java 25 (LTS)** | GA Sep 2025. Chosen as the current LTS; the original tie-breaker was `dd-trace-java` support, which no longer applies now that tracing is out of scope (§14) — the LTS argument stands on its own. |
 | Framework | **Spring Boot 4.1.x** (on `4.1.1`) | Spring Framework 7. Baseline Java 17+. **Jackson 3** is the default JSON mapper — package is `tools.jackson.*`, not `com.fasterxml.jackson.*`. |
 | Build tool | **Maven** | Single module in `backend/`. Use the `mvnw` wrapper (IntelliJ picks it up automatically). |
 | Persistence | **Spring Data MongoDB** | Repositories + `MongoTemplate` for aggregations. |
 | Security | **Spring Security** + `spring-boot-starter-oauth2-client` | Google OAuth2 login for the SPA; a static bearer token for the MCP server. |
 | API docs | **springdoc-openapi 3.x** | Swagger UI at `/swagger-ui.html` — useful for manual testing while learning. **Pin the 3.x line**: springdoc 2.x targets Boot 3 / Framework 6 and will not work on Boot 4. **Disabled in prod** (`springdoc.api-docs.enabled=false`) — see §6. |
 | Metrics | **Micrometer** + `micrometer-registry-datadog` | Pushes custom metrics straight to the Datadog API over HTTPS — independent of whether the Agent is installed. Budget: ~100 custom timeseries (see §6). |
-| APM | **`dd-trace-java`** javaagent, **local only** | Never runs on the VPS: tracing needs a Datadog Agent to send to, and the Agent plus a JVM does not fit in 1 GB. Exercised on the laptop during the 14-day trial for screenshots and interview material. APM is also a separate paid SKU, not part of student-pack Pro (see §6). |
 | Tests | JUnit 5, **Testcontainers** (real MongoDB), Spring Boot Test | `*Test` = unit (Surefire), `*IT` = integration (Failsafe). Use the `mongo:8` image to match the Atlas major version. |
 
 ### Frontend
@@ -115,7 +117,7 @@ Update this table at the end of every working session.
 | Thing | Choice | Notes |
 |---|---|---|
 | Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** One instance. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
-| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for `dd-trace-java` and any native dependency. |
+| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for any native dependency. |
 | Runtime deploy | **Fat JAR + `systemd`** — **no Docker on the VPS** | Mongo is managed (Atlas), so the box only runs the API + Nginx; Docker's parity/autodiscovery wins don't apply and it costs memory. |
 | Reverse proxy / TLS | **Nginx + certbot (Let's Encrypt)** | Same pattern the owner used on a prior project. Serves the SPA static build and proxies `/api`, `/oauth2`, `/login` to `127.0.0.1:8080`. |
 | CI/CD | **GitHub Actions** | `mvn verify` → `mvn package` → `scp` JAR to the VPS → `ssh systemctl restart`. Frontend: `npm run build` → `rsync dist/` → `/var/www/jobtracker`. |
@@ -146,8 +148,9 @@ Update this table at the end of every working session.
   Claude Desktop ──stdio──▶  MCP server (local, TS)  ───┘  (calls the deployed /api)
 
   Spring Boot API ──HTTPS──▶ Datadog API   (custom metrics via Micrometer, always)
-  Local dev run + Datadog Agent (laptop) ──▶ Datadog   (APM traces, trial window only —
-                                                        never on the 1 GB VPS)
+
+  There is no Datadog Agent anywhere in this diagram, and that is deliberate: Micrometer
+  pushes over the API, and tracing is out of scope entirely (§6, §14).
 ```
 
 ### Request flows
@@ -162,8 +165,8 @@ Update this table at the end of every working session.
   Claude.
 - **Metrics:** the deployed API pushes custom metrics to Datadog continuously via the
   Micrometer Datadog registry — over HTTPS, no agent involved. **There is no Datadog Agent
-  in production**, so there are no production traces; APM is exercised on a local run during
-  the trial only (§6).
+  anywhere**, in production or locally, and therefore no traces at all. Tracing is a
+  declared non-goal (§14); the reasoning is in §6 (2026-09-02).
 
 ---
 
@@ -184,12 +187,12 @@ Application-Tracker/
 │   └── src/
 │       ├── main/java/dev/duynguyen/jobtracker/
 │       │   ├── JobTrackerApplication.java
-│       │   ├── config/        ← SecurityConfig, MongoConfig, OpenApiConfig, IndexInitializer
+│       │   ├── config/        ← SecurityConfig, MongoConfig, OpenApiConfig, IndexInitializer, WebConfig
 │       │   ├── company/       ← Company, CompanyRepository, CompanyService, CompanyController, dto/
 │       │   ├── application/   ← Application, Stage, *Repository, *Service, *Controller, dto/
 │       │   ├── stats/         ← StatsService (MongoTemplate aggregations), StatsController
 │       │   ├── auth/          ← BearerTokenFilter, AllowlistOidcUserService, ProblemDetailAuthHandler, MeController
-│       │   └── common/        ← GlobalExceptionHandler, enums/, error DTO, time utils
+│       │   └── common/        ← GlobalExceptionHandler, enums/, error DTO, time utils, Validation
 │       ├── main/resources/
 │       │   ├── application.yml            ← shared defaults
 │       │   ├── application-local.yml      ← local dev (localhost Mongo, Swagger on)
@@ -201,9 +204,9 @@ Application-Tracker/
 │   └── src/
 │       ├── main.tsx / App.tsx
 │       ├── api/               ← apiClient.ts, types.ts (mirror backend DTOs), hooks/
-│       ├── components/        ← StatCard, StatusBadge, StageTimeline, FiltersBar, ...
+│       ├── components/        ← StatCard, StatusBadge, StageTimeline, FiltersBar, SafeLink, ...
 │       ├── pages/             ← Dashboard, ApplicationsList, ApplicationDetail, ApplicationForm
-│       └── lib/               ← formatting, date helpers
+│       └── lib/               ← formatting, date helpers, url.ts (href scheme allowlist)
 │
 ├── mcp-server/                ← TypeScript MCP server (runs locally)
 │   ├── package.json / tsconfig.json
@@ -214,7 +217,8 @@ Application-Tracker/
 │
 ├── deploy/
 │   ├── jobtracker.service     ← systemd unit for the API
-│   ├── nginx-jobtracker.conf  ← Nginx vhost
+│   ├── nginx-jobtracker.conf  ← Nginx vhost (rate limiting; written in Phase 3)
+│   ├── jobtracker-proxy.conf  ← proxy_set_header snippet, incl. X-Forwarded-Proto
 │   ├── backup-mongo.sh        ← mongodump + push to Oracle Object Storage (rclone)
 │   ├── backup-mongo.service   ← + backup-mongo.timer (systemd timer)
 │   └── RUNBOOK.md             ← step-by-step server setup + deploy + restore
@@ -265,7 +269,7 @@ Each entry: what was decided, why, what was rejected. **Append, don't rewrite.**
   dashboards, and monitors are.
   *(**Superseded** by the 2026-09-01 review entry below: the GitHub Student Developer Pack
   provides Pro, so the Agent stays permanently. The APM half still stands — APM is a
-  separate paid SKU on every plan.)*
+  separate paid SKU on every plan.)* *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
 - **MCP server in TypeScript, stdio transport.** Most-trodden path for Claude Desktop;
   official SDK; runs locally and calls the *deployed* API so validation stays in one
   place.
@@ -303,7 +307,7 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   The APM-is-a-separate-SKU half still stands.)*
   **APM is unchanged and still trial-only**: it is a separate paid SKU (~$31/host/mo) and
   is *not* part of Pro, student pack or otherwise. Micrometer's registry pushes over the
-  API and does not depend on the Agent, so it stays as-is either way.
+  API and does not depend on the Agent, so it stays as-is either way. *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
 - **Custom-metric budget: ~100 timeseries.** Pro allots 100 custom metrics *per host* and
   we have one host. Datadog counts unique metric-name + tag-value combinations, and
   Micrometer expands one timer into several metrics (count/sum/avg/max), so exporting
@@ -399,7 +403,9 @@ description implies. This supersedes the "APM uses the second free micro" bullet
   Agent on the laptop, drive it with the `.http` collection, capture the flame graphs and
   the service map. This is a real, working `dd-trace-java` setup and gives genuine interview
   material about instrumentation and trace sampling — it is simply not the deployed
-  instance, and the README says so.
+  instance, and the README says so. *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
+  The premise here — that a 14-day APM trial exists to be spent — turned out to be false;
+  see 2026-09-02.
 - **The claims were narrowed to match.** §1's deliverable and the resume bullet now say
   "metrics, dashboards and alerting" for production and name APM separately as local. This
   is the honest version: a reviewer who asks "so what does your APM show in prod?" gets a
@@ -735,6 +741,248 @@ feedback. Merged to `main` with the UI explicitly a first pass.
 - **`index.html`** loads Fraunces + Inter + JetBrains Mono from Google Fonts; new favicon
   (pine funnel mark). `color-scheme: light`.
 
+### 2026-09-02 — Pre-deploy security pass
+
+A full read of the backend and frontend before Phase 4, looking for security flaws rather
+than bugs. The two-chain auth model, the constant-time token comparison, the allowlist,
+CSRF wiring, regex escaping and the absence of any XSS sink all held up unchanged; git
+history was scanned across every ref and carries only placeholders. Six changes came out
+of it. Recorded here because each is a rule, not a fix.
+
+- **URL fields are scheme-restricted, at both ends.** `jobPostingUrl` and `company.website`
+  were `@Size`-only and were rendered straight into `<a href>`. React escapes text content
+  but **not** href attributes, so a stored `javascript:alert(1)` was a link that ran script
+  in the app's own origin — stored XSS whose only mitigation was that the app has one
+  writer. Backend: `common/Validation.HTTP_URL` on all four DTO fields. Frontend:
+  `lib/url.ts` parses with `new URL()` (not a regex — it normalises `JaVaScRiPt:`, leading
+  control characters and whitespace before the protocol is read) and `components/SafeLink`
+  is now the only place a stored URL becomes a link. Two independent checks deliberately:
+  the constraint cannot retroactively clean rows written before it existed.
+- **`app.mcp-token` no longer has a working default on the `local` profile.** It was
+  `${APP_MCP_TOKEN:local-dev-token-change-me}` — a read token for the entire API, published
+  in a public repo, live for anyone who ever boots prod with the wrong profile active. Now
+  `${APP_MCP_TOKEN:}`, which `BearerTokenFilter`'s `isBlank()` guard turns into "nobody
+  authenticates". Fails closed, matching what `AppProperties` already argued for the
+  allowlist. Prod was already correct (no default at all).
+- **`@Valid` moved onto the type argument** — `List<@Valid ContactRequest>`, not
+  `@Valid List<ContactRequest>`. Both cascade today, but Hibernate Validator deprecated the
+  container form (HV000271, warned on every startup). If support is dropped, nested contact
+  and stage validation stops running **silently** — no error, just unvalidated input. The
+  warnings are gone from the build, which is how the fix was confirmed.
+- **Collections are bounded and so is page size.** `stages` ≤ 50, `contacts` /
+  `interviewers` / `tags` ≤ 20, and `config/WebConfig` caps the pageable resolver at 100
+  (Spring Data's default max is **2000** — `@PageableDefault(size = 20)` sets the default,
+  it does not cap what a caller may ask for). Self-inflicted only, since there is one
+  writer, but `?size=2000` against `-Xmx256m` on a 1 GB box is a one-line OOM.
+- **`deploy/nginx-jobtracker.conf` + `deploy/jobtracker-proxy.conf` written early.** Two
+  things could not wait for Phase 4. Rate limiting (`limit_req_zone` for `/api` at 10r/s,
+  `/oauth2` and `/login` at 1r/s, plus `limit_conn` and a 256k body cap): a flood does not
+  need to authenticate to take down a 1/8-OCPU box. And `X-Forwarded-Proto`, without which
+  `request.isSecure()` is false behind Nginx and Spring builds the OAuth `redirect_uri` as
+  `http://` — Google then rejects it and **login fails outright**, not degrades. The proxy
+  headers live in one snippet because three near-identical `location` blocks is how they
+  drift.
+- **`server.forward-headers-strategy: framework` was already set in `application-prod.yml`.**
+  Flagged as a suspected gap and found to be a false alarm. Noted so it is not "fixed" again.
+- **`/actuator/health` is permitted on loopback only.** It has to stay unauthenticated —
+  the deploy smoke check curls it with no credential — but it does not have to be reachable
+  from the internet, and the difference matters because the response is only harmless while
+  two properties stay right. `application.yml` already sets
+  `management.endpoints.web.exposure.include: health` and
+  `management.endpoint.health.show-details: never` (both verified), which is why this was
+  filed as info rather than a hole. But `show-details: always` is one word and a plausible
+  thing to type while debugging a failing probe, and it turns the same public URL into the
+  Mongo driver's wire version, the JAR's path on disk, and the volume's free space.
+  `SecurityConfig.LOOPBACK_HEALTH` scopes the `permitAll` so that mistake stops being a
+  disclosure — the same two-independent-reasons shape already used for Swagger. Defence in
+  depth on top of "8080 is not publicly reachable", **not** a replacement for it: anyone
+  reaching 8080 directly could spoof `X-Forwarded-For`. `SecurityIT.publicEndpoints` asserts
+  both directions, and was confirmed to fail (`expected:<401> but was:<200>`) with the rule
+  reverted.
+
+**Still open, deliberately not done in this pass:** *(**Resolved** — see the entry below.)*
+the SPA's static assets get no response
+security headers. Spring Security sets `nosniff` / `X-Frame-Options: DENY` / HSTS on
+`/api`, `/oauth2` and `/login`, but `index.html` and the JS bundle are served by Nginx and
+get none, so the app is framable. A CSP must allow `fonts.googleapis.com` and
+`fonts.gstatic.com` (`index.html` loads Google Fonts). The vhost says so in a comment.
+
+### 2026-09-02 — Security headers on the static assets, and the nginx config actually run
+
+Closes the one item the security pass above left open, and stops `deploy/` being a set of
+files nobody had ever executed.
+
+- **Response security headers now cover the static half of the site**, in
+  `deploy/jobtracker-security-headers.conf`: HSTS, `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy`, `X-Frame-Options: DENY` and a CSP. Spring Security already sets its
+  own on `/api`, `/oauth2` and `/login`, so the snippet is included **only** in the static
+  locations — putting it at server level would double every header on the API responses, and
+  two `Content-Security-Policy` headers are enforced as their *intersection*, which is a
+  miserable thing to debug later.
+- **`add_header` does not merge, and that shaped the file.** A location block containing any
+  `add_header` of its own silently discards every `add_header` inherited from its parent —
+  no warning, no error. `/assets/` and `= /index.html` both set `Cache-Control`, so they
+  would have lost the entire security set had it been declared once at server level. The
+  include is therefore repeated in all three static locations. **Do not "tidy" it by
+  hoisting it.**
+- **The CSP's shape is dictated by what the app actually does.** `script-src 'self'` with no
+  `'unsafe-inline'` is achievable because the Vite build emits an external module bundle and
+  zero inline `<script>` blocks (checked against `dist/index.html`). `style-src` **does**
+  need `'unsafe-inline'`, and that is an accepted gap rather than an unnoticed one: the
+  components carry 74 inline `style={{…}}` attributes and `style-src` governs style
+  attributes as well as `<style>` blocks, so removing it means moving all 74 into
+  `theme.css` first. Inline style injection is a far weaker vector than script.
+  `fonts.googleapis.com` / `fonts.gstatic.com` are there for the webfonts `index.html`
+  links, and `*.googleusercontent.com` for the Google profile picture in the sidebar avatar.
+- **`expires 1y` and `add_header Cache-Control` together emit the header twice.** `expires`
+  generates its own `Cache-Control` and `add_header` appends rather than replaces, so
+  `/assets/` was returning both `max-age=31536000` and `public, immutable` as separate
+  headers. Found by reading real responses, not by reading the file. Now one `add_header`
+  and no `expires`.
+- **The nginx config was run, not just written.** `nginx:alpine` in Docker with a throwaway
+  self-signed cert: `nginx -t` passes, all six headers are present on `/`, `/index.html`
+  **and** `/assets/app.js` (which is the proof the inheritance handling works), and 30 rapid
+  requests to `/api` produce 21 pass-throughs followed by 429s — `burst=20` behaving exactly
+  as configured. Worth repeating on the VPS after certbot rewrites the TLS block.
+
+### 2026-09-02 — APM is not offerable on the student Pro plan
+
+The Phase 0 item flagged as "the one with no recovery path if discovered late" was checked,
+and the answer is no. Recorded here because `PLAN.md` Phase 0 requires it, and because the
+reasoning matters more than the fact.
+
+- **What was checked:** account is redeemed and shows **Pro** via the GitHub Student
+  Developer Pack, API key generated, DD site noted. Under *Plan & Usage*, **APM offers no
+  trial affordance.**
+- **Why, and why it was predictable.** APM is a separate paid SKU (~$31/host/mo) and is not
+  bundled into Pro on any plan — already recorded on 2026-09-01. The 14-day trial the
+  earlier entries assumed is the *new-account evaluation* trial; redeeming the student Pro
+  offer takes the account onto Pro and that evaluation window is no longer on offer. So the
+  two decisions were individually right and their combination was never checked, which is
+  exactly the thing this Phase 0 item existed to catch.
+- **Blast radius: nil for anything already claimed.** §1's deliverable 2 and the resume
+  bullet were narrowed on 2026-09-01 to say "metrics, dashboards and alerting" for
+  production and to name APM separately as a local exercise. Nothing anywhere promises
+  production APM. What is lost is only the *local* flame-graph screenshots and the
+  `dd-trace-java` instrumentation story.
+- **What production keeps, unchanged:** custom metrics pushed by Micrometer straight to the
+  Datadog API over HTTPS (never needed an Agent), the dashboard, and the error-rate monitor.
+  ~13-month retention on Pro, which is what made the "applications over time" widget worth
+  building. Phase 5 is otherwise unaffected.
+- **Open:** whether to drop tracing from the project entirely or exercise it locally through
+  OpenTelemetry instead. Not decided here — see the next entry when it is.
+
+**Interview note, worth keeping.** "Why is there no APM in production?" now has a better
+answer than a screenshot would have been: a 1 GB host, an Agent that needs ~0.5 GB beside a
+JVM already at ~500 MB, one instance in the tenancy, and a tracing SKU that is separately
+billed. That is a capacity-and-cost tradeoff explained from first principles, which is
+stronger material than a flame graph captured on a laptop.
+
+### 2026-09-02 — Tracing dropped from the project (Option A)
+
+Follows directly from the entry above. With no APM trial offerable, the choice was: drop
+tracing, stand up a second Datadog org on its own evaluation trial, or exercise tracing
+locally through OpenTelemetry to a Jaeger/Tempo container. **Dropped.**
+
+- **Nothing that was claimed had to change**, which is what made this the cheap option.
+  §1's deliverable and the resume bullet were narrowed on 2026-09-01 to say "metrics,
+  dashboards and alerting" for production, with APM named separately as local-only. Removing
+  the local half left every outward claim exactly as it was.
+- **Rejected: a second Datadog org on a fresh evaluation trial.** It would have worked, and
+  it means two orgs and two API keys, one of which is production's. The realistic failure is
+  pointing the local Agent at the prod key, or the reverse — a live credential mishandled for
+  the sake of screenshots. Not a good trade.
+- **Rejected: OpenTelemetry + a local collector.** Genuinely appealing: no trial clock, real
+  flame graphs, and arguably the more transferable skill. Declined because it adds a tool and
+  a container to a project whose §12 premise is that every dependency is something the owner
+  must learn to debug, and whose §14 has already turned down larger things for the same
+  reason. **This is the one to revisit** if distributed tracing is ever wanted on the CV —
+  it is the right approach, it just is not this project's job.
+- **What the observability deliverable is now, in full:** custom metrics pushed by Micrometer
+  straight to the Datadog API, a dashboard, and one error-rate monitor — against the deployed
+  instance, at ~13-month retention on student Pro. No Agent anywhere, in production or
+  locally. Phase 5 loses its APM subsection and its wind-down step and is otherwise unchanged.
+- **The custom-metric budget still binds.** ~100 timeseries per host, and Micrometer expands
+  one timer into several metrics — that constraint came from Pro, not from APM, and dropping
+  tracing does not relax it. The `MeterFilter` on `http.server.requests` is still required.
+
+**Recorded as a non-goal, not an omission.** §14 now names APM explicitly, with the reasoning,
+so it reads as a decision to anyone reviewing the repo — which is the same convention already
+applied to frontend tests and Kubernetes.
+
+### 2026-09-02 — Multi-user reconsidered, and deliberately declined
+
+Raised during Phase 4 prep and settled the same day. **No change: single user, enforced by
+the email allowlist.** §14's non-goal stands as written.
+
+Recorded because of *when* it was asked. The database is still empty — the Phase 4 backfill
+has not run — so this was the one moment where adding `ownerId` to `companies` and
+`applications` was a schema edit rather than a data migration. That window closes as soon as
+real applications are entered. Passing it up is a choice, not an oversight, and a later
+session should not have to guess whether it was ever considered.
+
+- **What multi-tenancy would have cost here**, since the audit was done anyway: `ownerId` on
+  both collections keyed on the OIDC `sub` claim (not email — emails change); owner scoping
+  on both repositories, `CompanyService`, `ApplicationService`, `ApplicationQueryService`'s
+  three queries and `StatsService`'s `$facet`; `name_unique` becoming a compound
+  `{ownerId, name}` index, because a globally unique company name means the second person to
+  apply to Stripe gets a 409; an ownership check inside `ApplicationService.requireCompany`,
+  or user A can attach an application to user B's company; per-user MCP tokens, since the
+  current static one is permitted on `GET /api/**` and would read everyone's data; and
+  cross-tenant tests across all 16 endpoints. The frontend would barely change.
+- **Why not, beyond effort.** A missed owner filter fails *silently* — it leaks data rather
+  than throwing. A half-finished multi-tenant app is worse for a portfolio than a clean
+  single-user one that documents the constraint, which §14 already does.
+- **Open public signup was rejected more firmly.** It adds abuse handling, storage growth on
+  a 512 MB shared M0, account deletion and export, and the obligation of holding *strangers'*
+  recruiter names, emails and phone numbers in `contacts[]` — third-party personal data, with
+  backups currently deferred. Mostly obligation, very little engineering signal.
+- **If this is ever revisited**, the allowlisted-but-private variant is the one to build:
+  real multi-tenancy with no abuse surface. Open signup is not.
+
+### 2026-09-02 — Phase 4: deployed
+
+Live at `https://app4jobtrack.me`. The runbook (`deploy/RUNBOOK.md`) was written before the
+deploy and corrected *during* it, which is why it now contains several things that were not
+obvious in advance. Recorded here are the decisions; the traps are in `STATE.md §4`.
+
+- **Three identities on the box, and sudo scoped to one command.** `ubuntu` is a person,
+  `deploy` is CI, `jobtracker` runs the JVM and owns the secrets with no login shell. CI's
+  sudoers entry permits exactly `systemctl restart jobtracker`. The cost of this shows up
+  immediately — the `deploy` account needs its SSH key installed *through* `ubuntu`, since
+  `ssh-copy-id` cannot authenticate as an account that has no key yet — and it is still the
+  right shape: a leaked CI key restarts a service, it does not own the box.
+- **Ordering in the runbook was wrong twice, in the same way.** Atlas access was Step 9 but
+  the app cannot boot without it (Step 7), and the deploy key was Step 11 but Step 7 uses it.
+  Both were found by hitting them. The general lesson: a runbook's numbering encodes a
+  dependency graph, and writing it linearly hides the edges.
+- **`/actuator/health` being loopback-only shaped the CI gate.** The deploy workflow polls
+  health *over ssh on the box* rather than from the runner, because the endpoint is not
+  publicly reachable by design (2026-09-02 security pass) and Nginx does not proxy
+  `/actuator`. A runner curling the public URL would 401 and fail every deploy. Worth noting
+  as a case where a security decision correctly constrained a later design rather than being
+  worked around.
+- **The deploy gate is health, not systemd.** `systemctl restart` returning says the process
+  started, not that the app works — on this box those are ~40 seconds apart, and every
+  failure so far (Mongo auth, Datadog key) happened *after* Tomcat was already listening.
+  The workflow polls for up to 180s and fails the deploy if health never reports `UP`.
+- **Rollback is the JAR symlink.** Each deploy uploads `app-<sha>.jar` and repoints
+  `app.jar`; the three newest are kept. With no Docker there is no image tag, so this is the
+  rollback story in full — a decision from 2026-09-01 that only becomes concrete here.
+- **Backups deferred, deliberately and with the cost written down.** M0 has no automated
+  backup, no undelete and no point-in-time restore. `CLAUDE.md §3` names the `mongodump`
+  cron as the reason M0 was acceptable over self-hosting, so that argument is currently
+  unbacked. `PLAN.md` Phase 4's backup items are marked `[~]` rather than left unticked so
+  the phase does not read as merely unfinished.
+- **The backfill was skipped**, so the live app is empty. `PLAN.md` puts it first in Phase 4
+  precisely because it is the cheapest place to find schema and validation problems, and
+  deploying first inverted that. It is now the main thing standing between a working
+  deployment and actually using it.
+
+**Datadog is on site US5, not US1.** A key is valid only on its own site and a mismatch is
+rejected with no error the app surfaces — a healthy service and an empty dashboard, with
+nothing linking the two. §8 and the runbook now carry the detection loop.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
@@ -809,7 +1057,7 @@ takes `DD_API_KEY` through its own config, not the app's).
 | `APP_MCP_TOKEN` | API + MCP server | long random string; MCP sends it as `Authorization: Bearer` |
 | `APP_BASE_URL` | API | `https://<your-domain>` — used for the OAuth redirect |
 | `DD_API_KEY` | API (metrics) | Datadog API key for the Micrometer registry |
-| `DD_SITE` | API (metrics) | e.g. `datadoghq.com` |
+| `DD_SITE` | API (metrics) | **`us5.datadoghq.com`** for this org. Datadog runs several sites (`datadoghq.com` = US1, `us3`, `us5`, `datadoghq.eu`, `ap1`) and a key is valid only on its own; a mismatch is rejected silently — no error worth noticing, no data in the UI. `application-prod.yml` builds the Micrometer `uri` from this. |
 | `API_BASE_URL` | MCP server | `https://<your-domain>` |
 
 Spring profiles:
@@ -1009,8 +1257,19 @@ Full steps in `deploy/RUNBOOK.md` (written in Phase 4). Summary:
 - **Email/calendar notifications.** `followUpDate` and `get_upcoming_interviews` surface
   what's due; no push notifications.
 - **Native mobile app.** Responsive web only, and even that is a stretch goal.
-- **GraalVM native image.** Kills the `dd-trace-java` javaagent path and the build is
-  painful on 2 ARM cores.
+- **GraalVM native image.** The original reason was that it kills the `dd-trace-java`
+  javaagent path; with tracing dropped that no longer applies, but the build is still
+  painful and buys nothing here — a single-user API's startup time is not a problem worth
+  a native-image toolchain.
+- **APM / distributed tracing, in any form.** Not an oversight and not a casualty of the
+  1 GB box alone: Datadog APM is a separately-billed SKU with no trial offerable on top of
+  the student Pro plan (§6, 2026-09-02), and the alternatives — a second Datadog org on its
+  own evaluation trial, or OpenTelemetry to a local Jaeger/Tempo — were both considered and
+  declined. The first risks cross-wiring a prod API key for the sake of screenshots; the
+  second adds a tool to a project that deliberately keeps its dependency count low (§12).
+  The observability story is custom metrics, a dashboard and an alert, on a genuinely
+  deployed service — and "why is there no APM?" is answerable from first principles, which
+  is better material than a flame graph captured on a laptop.
 - **Kubernetes / containers on the VPS.** See §6.
 - **Frontend and end-to-end tests.** Deliberate: the backend carries the test story
   (unit + Testcontainers ITs on every endpoint), and the SPA is a single-user dashboard

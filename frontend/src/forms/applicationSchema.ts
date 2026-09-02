@@ -10,6 +10,7 @@ import {
   APPLICATION_STATUSES,
   WORK_MODES,
 } from '../lib/enums';
+import { safeUrl } from '../lib/url';
 
 /**
  * Mirrors `CreateApplicationRequest` / `UpdateApplicationRequest` (SCHEMA.md §8.1).
@@ -32,7 +33,13 @@ export const applicationSchema = z
     appliedDate: z.string().min(1, 'Applied date is required'),
     source: enumOptions(APPLICATION_SOURCES),
     followUpDate: z.string().optional(),
-    jobPostingUrl: z.string().trim().max(1000).optional(),
+    // See companySchema.website — same rule, same reason.
+    jobPostingUrl: z
+      .string()
+      .trim()
+      .max(1000)
+      .optional()
+      .refine((v) => !v || safeUrl(v) !== null, 'Must start with http:// or https://'),
     location: z.string().trim().max(200).optional(),
     workMode: z.string().optional(), // '' or a WorkMode
     compMin: z.string().optional(),

@@ -1,5 +1,8 @@
 package dev.duynguyen.jobtracker.config;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -15,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 import dev.duynguyen.jobtracker.auth.AllowlistOidcUserService;
 import dev.duynguyen.jobtracker.auth.BearerTokenFilter;
@@ -45,6 +49,53 @@ public class SecurityConfig {
     private static final String[] SWAGGER_PATHS = {
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**"
     };
+
+    /**
+     * {@code /actuator/health}, but only for a caller on the loopback interface.
+     *
+     * <p>The endpoint has to stay unauthenticated: the deploy smoke check and any future
+     * systemd readiness probe curl it on the box with no session and no token. What it does
+     * <em>not</em> have to be is reachable from the internet — and the difference matters
+     * because a health body is only harmless while two separate properties stay correct.
+     * {@code management.endpoints.web.exposure.include} limits it to {@code health}, and
+     * {@code management.endpoint.health.show-details=never} keeps the response to
+     * {@code {"status":"UP"}}; flip the latter to {@code always} — one word, and a plausible
+     * thing to do while debugging a failing probe — and the same public URL starts returning
+     * the Mongo driver's wire version, the disk path the JAR runs from, and how much free
+     * space the volume has.
+     *
+     * <p>Scoping the rule to loopback means that mistake stops being a disclosure. This is
+     * the same belt-and-braces shape as Swagger above: the property is the first reason the
+     * details are not public, and this is the second, independent one.
+     *
+     * <p><strong>What this is not.</strong> It is defence in depth on top of "port 8080 is
+     * not publicly reachable", not a replacement for it. With
+     * {@code server.forward-headers-strategy=framework} active, {@code getRemoteAddr()} is
+     * the client address Nginx reports, so a request proxied from outside is correctly seen
+     * as non-loopback — but anyone able to reach 8080 <em>directly</em> could also spoof
+     * {@code X-Forwarded-For}. Keep 8080 bound to the box and out of the VCN security list;
+     * the Nginx vhost deliberately does not proxy {@code /actuator} either.
+     */
+    private static final RequestMatcher LOOPBACK_HEALTH = request ->
+            "/actuator/health".equals(request.getRequestURI()) && isLoopback(request.getRemoteAddr());
+
+    /**
+     * True for 127.0.0.0/8 and ::1.
+     *
+     * <p>{@code InetAddress.getByName} does not hit DNS for an IP literal, which is all
+     * {@code getRemoteAddr()} ever returns. Anything unparseable is treated as remote —
+     * the failure mode of this method must be "deny", not "allow".
+     */
+    private static boolean isLoopback(String remoteAddress) {
+        if (remoteAddress == null || remoteAddress.isBlank()) {
+            return false;
+        }
+        try {
+            return InetAddress.getByName(remoteAddress).isLoopbackAddress();
+        } catch (UnknownHostException e) {
+            return false;
+        }
+    }
 
     /**
      * <strong>Chain 1 — the MCP server.</strong> Stateless, no CSRF, read-only.
@@ -119,7 +170,11 @@ public class SecurityConfig {
 
         return http
                 .authorizeHttpRequests(auth -> {
-                    auth.requestMatchers("/login/**", "/oauth2/**", "/actuator/health").permitAll();
+                    auth.requestMatchers("/login/**", "/oauth2/**").permitAll();
+                    // Health is public only on loopback — see LOOPBACK_HEALTH. A request
+                    // from anywhere else does not match, falls through to anyRequest(),
+                    // and is denied like any other unauthenticated path.
+                    auth.requestMatchers(LOOPBACK_HEALTH).permitAll();
                     if (local) {
                         auth.requestMatchers(SWAGGER_PATHS).permitAll();
                     }

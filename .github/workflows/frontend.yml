@@ -1,0 +1,68 @@
+name: frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # `ci` not `install`: it installs exactly the lockfile and fails if the two disagree,
+      # which is what you want in CI and not what you want on a laptop.
+      - name: Install
+        run: npm ci
+
+      # This is also the type-check — package.json's build is `tsc -b && vite build`, so a
+      # type error fails the deploy rather than shipping.
+      - name: Build
+        run: npm run build
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # --delete removes files no longer in the build. Safe here and necessary: Vite emits
+      # content-hashed filenames, so without it every deploy leaves the previous bundle
+      # behind forever on a 50 GB disk.
+      # No systemctl restart — Nginx serves these from disk and picks up changes at once.
+      - name: Deploy
+        run: |
+          rsync -avz --delete -e "ssh -i ~/.ssh/id_deploy" \
+            dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/jobtracker/"
+
+      - name: Verify
+        run: |
+          curl -sf -o /dev/null -w 'index.html %{http_code}\n' https://app4jobtrack.me/

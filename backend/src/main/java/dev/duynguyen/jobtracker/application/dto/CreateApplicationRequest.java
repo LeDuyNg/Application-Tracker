@@ -7,8 +7,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import dev.duynguyen.jobtracker.common.Validation;
 import dev.duynguyen.jobtracker.common.enums.ApplicationSource;
 import dev.duynguyen.jobtracker.common.enums.ApplicationStatus;
 import dev.duynguyen.jobtracker.common.enums.WorkMode;
@@ -39,13 +41,14 @@ public record CreateApplicationRequest(
         @NotNull ApplicationSource source,
 
         LocalDate followUpDate,
-        @Size(max = 1000) String jobPostingUrl,
+        @Size(max = 1000) @Pattern(regexp = Validation.HTTP_URL,
+                message = Validation.HTTP_URL_MESSAGE) String jobPostingUrl,
         @Size(max = 200) String location,
         WorkMode workMode,
         @Valid CompensationRequest compensation,
         @Size(max = 10000) String notes,
-        List<@Size(max = 40) String> tags,
+        @Size(max = 20) List<@Size(max = 40) String> tags,
 
         /** Optional — omit and the service seeds an APPLICATION_SUBMITTED stage. */
-        @Valid List<StageRequest> stages
+        @Size(max = 50) List<@Valid StageRequest> stages
 ) {}
