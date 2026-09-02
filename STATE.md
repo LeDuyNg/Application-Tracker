@@ -26,8 +26,16 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** **Phase 4 — Deploy. Done. The app is live at
-`https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0,
+**Current phase:** **Phase 5 — Datadog.** Phases 1–4 are done and merged; Phase 3's
+dogfooding bar was met on 2026-09-02 with three real applications entered through the live
+UI. Branch: `phase-5-datadog`.
+
+Phase 5 is **metrics, a dashboard and one alert** — there is no APM and no Agent anywhere,
+which is a decision (`CLAUDE.md §6`, §14), not a gap. The work is: domain counters through
+Micrometer, a `MeterFilter` to stay inside the ~100-timeseries budget, a dashboard with 3+
+widgets, and an error-rate monitor that gets test-fired. Nothing is on a clock.
+
+*Phase 4:* **Deploy. Done. The app is live at `https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0,
 and both GitHub Actions workflows deploying from `main`. Health `UP`, Datadog metrics
 flowing to **US5**. Two things deliberately not done: **backups** (deferred, `RUNBOOK.md`
 Step 12) and the **backfill**, so the live app is empty. Next is Phase 5 — Datadog
@@ -99,28 +107,25 @@ pointing into merged history. Harmless; delete them whenever.
   `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
   `/actuator/health` narrowed to loopback callers. **103 tests green.** Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
 
-### Open, after Phase 4
-1. **The backfill, and a full dogfooding pass.** Still the biggest gap, and now the *only*
-   thing between here and using the app for real. `PLAN.md` Phase 4 puts the backfill first
-   for a reason — it is the cheapest place to find schema and validation problems — and it
-   was skipped in the rush to deploy. **The live database is empty.** Do it against the
-   deployed app now rather than locally; that also serves as the dogfooding pass.
-2. **Backups are deferred**, not done. Atlas M0 has no automated backup, no undelete and no
-   point-in-time restore, so the moment real data goes in, it exists in exactly one place.
-   Worth reconsidering *before* the backfill rather than after. `RUNBOOK.md` Step 12.
-2. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
+### Open
+
+1. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Three applications entered
+   through the live UI at `https://app4jobtrack.me`, chosen to differ in status so the
+   funnel, follow-ups and filters had signal. Nothing broke. **This closes Phase 3** —
+   `PLAN.md`'s "run your real job-search workflow end-to-end" bar is met, against the
+   deployed app rather than locally, which is a stronger result than the plan asked for.
+2. **Backups are still deferred.** Atlas M0 has no automated backup, no undelete and no
+   point-in-time restore. There is now real data, so this has stopped being hypothetical —
+   three applications is small, but the argument only gets worse as it grows.
+   `RUNBOOK.md` Step 12.
+3. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
    iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
    flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
-3. **`npm run preview`** on the built `dist/` — never run (the `build` step itself is green).
-4. ~~**Static assets have no response security headers.**~~ **Done** —
-   `deploy/jobtracker-security-headers.conf` (HSTS, nosniff, Referrer-Policy,
-   Permissions-Policy, X-Frame-Options, CSP), included in each static location because
-   `add_header` does not inherit into a block that sets one of its own. The whole vhost was
-   run under `nginx:alpine` in Docker: `nginx -t` passes, the headers appear on `/`,
-   `/index.html` and `/assets/*`, and the rate limiter returns 429 after its burst.
-   **Re-run `nginx -t` on the VPS** once certbot has rewritten the TLS block.
-4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
-   authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
+4. **`npm run preview`** on the built `dist/` — never run locally. Largely moot now that CI
+   builds and deploys the real thing on every push.
+5. **Re-run `nginx -t` on the VPS** at some point after certbot's next renewal, and confirm
+   the security headers still come back — certbot rewrites the vhost, and the headers are
+   `add_header` directives it has no reason to preserve deliberately.
 
 ### Phase 0 — complete
 Datadog is redeemed, shows **Pro**, and an API key is generated. The

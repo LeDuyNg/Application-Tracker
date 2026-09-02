@@ -572,13 +572,19 @@ redirect URI).
 Do this *first*, against local Mongo, before the deploy — it is the fastest way to find
 schema and validation problems, and the app is useless for dogfooding while it's empty.
 
-- [ ] Write `backend/src/test/http/backfill.http` or a throwaway script that POSTs the
-      applications you've already sent (companies first, then applications with their real
-      `stages[]` and dates).
-- [ ] Expect to be entering **historical** interviews — stages that already happened. This
+> **Done 2026-09-02, but out of order and against the deployed app**, not local Mongo. The
+> deploy went first and this followed, which is the inversion this section exists to prevent.
+> It cost nothing this time — three applications entered through the live UI, no schema or
+> validation problems surfaced — but the reason for the original ordering stands: a schema
+> problem found here is cheap, and the same problem found after data is in Atlas is not.
+
+- [x] ~~Write `backend/src/test/http/backfill.http`~~ — entered through the live UI instead,
+      which also served as the Phase 3 dogfooding pass. Three applications, deliberately
+      differing in status so the funnel, follow-ups and filters had something to show.
+- [x] Expect to be entering **historical** interviews — stages that already happened. This
       is why `scheduledAt` is not `@Future` (`SCHEMA.md §8.1`); if a past-dated stage is
-      rejected, that constraint crept back in.
-- [ ] Sanity-check the result against `GET /api/stats` — if the funnel or response rate
+      rejected, that constraint crept back in. *(It was not.)*
+- [x] Sanity-check the result against `GET /api/stats` — if the funnel or response rate
       looks wrong, it's cheaper to fix the aggregation now than after the data is in Atlas.
 
 ### Server baseline (`deploy/RUNBOOK.md` — write it as you go)

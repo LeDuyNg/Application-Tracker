@@ -59,7 +59,7 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 4 — Deploy. Done; live at `https://app4jobtrack.me`.** Oracle E2.1.Micro, Nginx + certbot TLS, systemd, Atlas M0, GitHub Actions deploying from `main`, health `UP`, Datadog metrics on **US5**. Deliberately not done: **backups** (deferred) and the **backfill**, so the live app is empty. Next is Phase 5 — Datadog dashboard + alert. See `STATE.md`. |
+| **Current phase** | **Phase 5 — Datadog** (branch `phase-5-datadog`). Phases 1–4 done and merged; live at `https://app4jobtrack.me`, auto-deploying from `main`. Phase 3's dogfooding bar was met 2026-09-02 with three real applications. Phase 5 is metrics + dashboard + one alert — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
