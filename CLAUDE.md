@@ -56,7 +56,7 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 1 — backend CRUD: complete.** 16 endpoints, RFC 7807 errors, 84 tests green, driven end to end by hand and verified against the real Atlas M0. **Phase 2 (auth) is next and is unblocked** — the Google client exists. |
+| **Current phase** | **Phase 2 — authentication: code complete.** Two filter chains (bearer/MCP + session/OAuth2), email allowlist with `email_verified`, RFC 7807 401/403, `GET /api/me`. 100 tests green. The one thing unverified is a real Google login, which needs the Phase 3 SPA on `:5173`. |
 | **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
@@ -188,7 +188,7 @@ Application-Tracker/
 │       │   ├── company/       ← Company, CompanyRepository, CompanyService, CompanyController, dto/
 │       │   ├── application/   ← Application, Stage, *Repository, *Service, *Controller, dto/
 │       │   ├── stats/         ← StatsService (MongoTemplate aggregations), StatsController
-│       │   ├── auth/          ← BearerTokenFilter, AllowlistOAuth2UserService, MeController
+│       │   ├── auth/          ← BearerTokenFilter, AllowlistOidcUserService, ProblemDetailAuthHandler, MeController
 │       │   └── common/        ← GlobalExceptionHandler, enums/, error DTO, time utils
 │       ├── main/resources/
 │       │   ├── application.yml            ← shared defaults
@@ -587,6 +587,58 @@ the cluster is empty.
   error somewhere else entirely. The template now uses `#mongodb:` at the correct
   indentation, so "delete the `#`" is unambiguous and correct, and the `.example` is checked
   by actually uncommenting it and parsing the result.
+
+### 2026-09-01 — Phase 2: authentication
+
+Two chains, as decided in the pre-build review. Verified against the running app with the
+real token, not only in tests: unauthenticated `/api` is 401 `problem+json` with **no**
+`Location` header, the `XSRF-TOKEN` cookie is present on that same rejected response, the
+bearer token reads and cannot write (403 on POST and DELETE), a wrong or empty token is 401,
+and `/oauth2/authorization/google` redirects to Google with
+`redirect_uri=http://localhost:5173/login/oauth2/code/google` and scope `openid profile email`.
+
+- **`AllowlistOidcUserService`, not `AllowlistOAuth2UserService`.** §5's layout planned the
+  latter before any code existed. Google's `openid` scope makes this an OIDC login, so the
+  extension point is `OidcUserService` and the class is named for what it actually is. §5
+  corrected rather than the code bent to match a guess made earlier.
+- **The allowlist check is split out of `loadUser` into `verify(OidcUser)`.**
+  `super.loadUser` calls Google's userinfo endpoint, so the method containing the rule was
+  untestable without a network. Splitting it is what turns "an unverified email is rejected"
+  from a comment into an assertion.
+- **An empty allowlist admits nobody, and an empty `app.mcp-token` authenticates nobody.**
+  Both fail closed, and both have a test. The failure mode being guarded is a deploy that
+  forgets the environment variable: locking the owner out is recoverable, admitting the
+  internet is not.
+- **The bearer comparison hashes both sides before comparing.** `MessageDigest.isEqual` does
+  not short-circuit on content, but it does compare lengths first, which leaks the token's
+  length. Hashing to a fixed 32 bytes removes that, and costs nothing at one request at a
+  time.
+- **Swagger is permitted only when the `local` profile is active**, in addition to being
+  disabled outright in prod by `springdoc.api-docs.enabled=false`. Two independent reasons,
+  deliberately: the property is one line from being flipped back by someone debugging
+  production, and publishing the whole API surface is a large consequence for a small
+  mistake.
+- **`server.servlet.session.cookie.secure` is set in `application-prod.yml`, not
+  `application.yml`.** A secure cookie is never sent back over plain http, so setting it
+  globally would break local login while looking like a session bug.
+- **Every Phase 1 IT now runs `@WithMockUser` with `.with(csrf())` on writes.** The
+  alternative — permitting the test paths in the security config — would mean the tests no
+  longer exercise the configuration that ships.
+
+### 2026-09-01 — A test that only failed after 9pm
+
+`ApplicationControllerIT.followups` asserted `daysOverdue == 0` for a follow-up dated
+`LocalDate.now()`. It passed all day and failed at 21:00 Pacific, because `app.timezone` is
+`America/New_York`: at 21:00 PDT it is already tomorrow in New York, the service computed
+`today()` a day ahead of the test's `LocalDate.now()`, and the assertion was off by exactly
+one.
+
+- **A test asserting on a relative-date boundary must use the same clock the service uses.**
+  The controller ITs now inject `TimeService` and call `today()`. This is the hazard
+  `SCHEMA.md §7` describes, arriving from the direction nobody watches — not in the
+  production code, which was right, but in the test written to check it.
+- Worth keeping in mind for CI: a GitHub runner is UTC, which is a *third* zone. The fix
+  makes the tests zone-independent rather than merely correct in one place.
 
 ---
 

@@ -78,9 +78,29 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+          Google OAuth2 login for the browser. Pulls spring-boot-starter-security
+          transitively, which is what activates the filter chains in config/SecurityConfig.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          @WithMockUser and the csrf() request post-processor. Split out per technology on
+          Boot 4 exactly like spring-boot-starter-webmvc-test below — spring-boot-starter-test
+          does not carry it.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
             <scope>test</scope>
         </dependency>
 

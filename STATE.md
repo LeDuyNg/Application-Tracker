@@ -26,56 +26,51 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 1 (backend CRUD) — **complete, including the Atlas check**. Phase 2 (auth) is next and is unblocked.
-**Branch:** `phase-1-backend-crud`, pushed and tracking `origin/phase-1-backend-crud`.
-`main` on the remote is still docs-only — the branch has not been merged.
+**Current phase:** Phase 2 (authentication) — **code complete**. One acceptance criterion
+cannot be checked until Phase 3 exists; see below.
+**Branch:** `phase-2-auth`, cut from `phase-1-backend-crud`. Neither is merged to `main`,
+which is still docs-only.
 
 ### Done and tested
-- Domain layer: 6 enums, `Company`/`Contact`, `Application`/`Stage`/`Compensation`.
-- `IndexInitializer` — all 9 indexes from `SCHEMA.md §6`, verified present in a real Mongo.
-- Repositories, request/response DTOs, hand-written mappers.
-- `CompanyService` (rename cascade, 409-on-delete) and `ApplicationService` (CRUD, stage
-  add/update/delete, and the three denormalization rules).
-- `StatsService` — the `$facet` aggregation plus a second one for average days to first
-  response.
-- `ApplicationQueryService` — follow-ups (both halves), upcoming interviews, escaped-regex
-  search. Separate from `ApplicationService` on purpose (`CLAUDE.md §6`).
-- **Controllers**: `CompanyController`, `ApplicationController`, `StatsController` — 16
-  operations, all listed in the OpenAPI doc. Plus `GlobalExceptionHandler` (RFC 7807).
-- `backend/src/test/http/jobtracker.http` — the full flow with assertions on every request,
-  plus deliberate error cases for the Phase 5 traces.
-- **84 tests green** (`./mvnw verify`): 20 unit, 64 integration across six `*IT` classes.
+- **Phase 1, complete** — domain, repositories, DTOs, mappers, `CompanyService`,
+  `ApplicationService` (three denormalization rules), `StatsService`,
+  `ApplicationQueryService` (follow-ups / interviews / search), 16 endpoints,
+  `GlobalExceptionHandler`, and the `.http` collection. Verified against the real Atlas M0.
+- **Phase 2** — two `SecurityFilterChain` beans:
+  - *bearer chain* (`@Order(1)`, matches an `Authorization: Bearer` header): stateless, CSRF
+    off, `GET /api/**` requires `ROLE_MCP`, everything else `denyAll()`. Token compared as
+    SHA-256 digests in constant time.
+  - *browser chain* (`@Order(2)`): Google OIDC login, `AllowlistOidcUserService` checking the
+    allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out, RFC 7807
+    401/403 instead of redirects, `GET /api/me`.
+- **100 tests green** (`./mvnw verify`): 26 unit, 74 integration across seven `*IT` classes.
 
-### Phase 1 is complete
-The last item — verifying against the real Atlas cluster — is done. Local dev is back on the
-Docker Mongo; the Atlas URI sits commented out in `backend/config/application-local.yml`
-(gitignored), two lines away from being re-enabled.
+### Verified against the running app, not just in tests
+Unauthenticated `/api` → 401 `problem+json` with **no** `Location` header; the `XSRF-TOKEN`
+cookie present on that same rejected response; bearer token reads (200) and cannot write
+(403 on POST and DELETE); wrong and empty tokens → 401; `/actuator/health` open; Swagger
+reachable on `local`; `/oauth2/authorization/google` → Google with
+`redirect_uri=http://localhost:5173/login/oauth2/code/google`, scope `openid profile email`.
 
-**Suggested next step: Phase 2 — authentication.** The Google client ID and secret are in
-place, which was the only thing blocking it. Phase 0's remaining item is the **Datadog**
-student-pack redemption, and the APM-trial-availability check inside it is the one task with
-no recovery path if it is discovered late — worth doing before Phase 5 regardless of what
-else is in flight.
+### The one thing not verified
+**A real Google login round trip.** The `local` redirect URI points at `http://localhost:5173`
+— the Vite dev server, which does not exist until Phase 3 — so signing in cannot currently
+complete. The allowlist logic is unit-tested in isolation (allowed / other address /
+unverified / missing claim / empty list). To try it before Phase 3, register
+`http://localhost:8080/login/oauth2/code/google` in the Google client and override
+`redirect-uri` to match in `backend/config/application-local.yml`.
 
-### Verified by hand, not just by tests
-The app was run on the `local` profile and driven end to end: company → application → stages
-→ stats / follow-ups / interviews / search, plus every error case. Confirmed live: Swagger
-lists all 16 operations, every error returns `application/problem+json` with the right status,
-partial-word search works (`strip` finds Stripe), `(senior)` does not 500, and `.*` matches
-nothing rather than everything. Startup is ~1.1s with all 9 indexes ensured.
+This also means the `.http` collection's **write** requests cannot run yet: they need a real
+`JSESSIONID`. Every `GET` works now, using the MCP bearer token.
 
-### Three things found while building this phase's back half
-All are in `CLAUDE.md §6` with full reasoning; repeated here because each was silent.
+**Suggested next step: Phase 3 — the React SPA.** It unblocks the login round trip as a side
+effect. Phase 0's remaining item is the **Datadog** student-pack redemption, and the
+APM-trial-availability check inside it is the one task with no recovery path if discovered
+late.
 
-- **`lastContactAt` was never set when an application was created with its `stages[]`
-  supplied.** `null` is not `$lte` any date, so those applications could never appear in the
-  gone-quiet query — and that is exactly the shape of the Phase 4 backfill. The entire
-  historical job search would have been invisible to the query it matters most for.
-- **`@Testcontainers` + `@Container` stops the container when a test *class* finishes.**
-  Latent while only `StatsServiceIT` existed; adding a second `*IT` broke every class after
-  the first, `StatsServiceIT` included, with `Connection refused`.
-- **MockMvc needs `spring-boot-starter-webmvc-test` on Boot 4**, and `@AutoConfigureMockMvc`
-  moved package. `spring-boot-starter-test` no longer carries the web slice.
+### Gaps noticed, deliberately not built
+- **No logout endpoint.** `PLAN.md` Phase 2 does not list one and Phase 3 does not either,
+  but a login system without one is odd — worth adding when the SPA needs it.
 
 ---
 
@@ -119,6 +114,8 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | springdoc | Needs the **3.x** line for Boot 4. 2.x targets Boot 3 and will not work. |
 | Atlas SRV string | Has **no database name** — ends `/?retryWrites=...`. Pasted as-is: `IllegalArgumentException: Database name must not be empty` at startup. Put `jobtracker` between the `/` and the `?`. |
 | Commented-out YAML | Uncommenting `# key:` by deleting only the `#` leaves a leading space, shifting the document to indent 1. SnakeYAML then blames a *later* line with "expected '<document start>'". Comment as `#key:` at the right indent so deleting `#` alone is correct. |
+| `oauth2Login()` with no client | Boot only creates a `ClientRegistrationRepository` when a registration is configured, so from Phase 2 **every** `@SpringBootTest` fails at context creation without dummy `client-id`/`client-secret`. Set on `AbstractMongoIT` and `JobTrackerApplicationTests`. |
+| `LocalDate.now()` in a test | The JVM's default zone, not `app.timezone`. A `daysOverdue` assertion passed all day and failed at 21:00 Pacific, when it became tomorrow in New York. Tests asserting on relative-date boundaries must use `TimeService.today()`. |
 | MockMvc on Boot 4 | Needs **`spring-boot-starter-webmvc-test`** — `spring-boot-starter-test` no longer carries the web slice — and `@AutoConfigureMockMvc` moved to `org.springframework.boot.webmvc.test.autoconfigure`. Fails as "package does not exist". |
 | `@Testcontainers` + `@Container` | Ties the container to a **test class** — it is stopped when that class ends, so every later `*IT` gets `Connection refused` against a cached port. Start it in a static initializer. |
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |

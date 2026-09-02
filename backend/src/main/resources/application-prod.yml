@@ -21,6 +21,14 @@ server:
   # OAuth redirect as http:// and Google rejects it.
   forward-headers-strategy: framework
 
+  servlet:
+    session:
+      cookie:
+        # Prod is HTTPS-only, so the session cookie must never travel in clear. Set here
+        # rather than in application.yml because on localhost there is no TLS and a secure
+        # cookie would simply never be sent back.
+        secure: true
+
 # Off in prod: Swagger would publish the whole API surface on a public domain
 # (CLAUDE.md §6).
 springdoc:
