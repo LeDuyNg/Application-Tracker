@@ -61,13 +61,13 @@ tracing SKU.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 6 — MCP server** (next branch `phase-6-mcp`). Phases 1–5 done and merged. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
+| **Current phase** | **Phase 6 — MCP server**, on branch `phase-6-mcp`. The server is built, tested against the live API and wired into `claude_desktop_config.json`; what remains is restarting Claude Desktop and running the four example queries. Phases 1–5 done and merged. Live at `https://app4jobtrack.me`, auto-deploying from `main`, with custom metrics, a dashboard and an error-rate monitor in Datadog (**us5**) — **no APM, no Agent**, by decision (§6, §14). Backups remain deferred. See `STATE.md`. |
 | **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | **`https://app4jobtrack.me`** — live since 2026-09-02. Deploy record: `deploy/RUNBOOK.md`. |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–4, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-5-datadog`. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–5, each merged `--no-ff` so every phase boundary is a commit. Current branch: `phase-6-mcp`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
@@ -210,12 +210,15 @@ Application-Tracker/
 │       ├── pages/             ← Dashboard, ApplicationsList, ApplicationDetail, ApplicationForm
 │       └── lib/               ← formatting, date helpers, url.ts (href scheme allowlist)
 │
-├── mcp-server/                ← TypeScript MCP server (runs locally)
-│   ├── package.json / tsconfig.json
+├── mcp-server/                ← TypeScript MCP server (runs locally, calls the deployed API)
+│   ├── package.json / tsconfig.json / README.md / .env.example
 │   └── src/
 │       ├── index.ts           ← server + stdio transport + tool registration
-│       ├── apiClient.ts       ← fetch wrapper, injects Bearer token
-│       └── tools/             ← one file per tool
+│       ├── config.ts          ← reads/validates API_BASE_URL + API_TOKEN; fails closed
+│       ├── apiClient.ts       ← fetch wrapper, injects Bearer token. `get` only, no writes
+│       ├── types.ts           ← mirrors of the backend response DTOs
+│       ├── format.ts          ← API JSON → the text Claude reads (dates, zones, enums)
+│       └── tools/             ← one file per tool, plus result.ts (text/error shapes)
 │
 ├── deploy/
 │   ├── jobtracker.service     ← systemd unit for the API
@@ -1094,6 +1097,62 @@ alerting" describes things that exist against the deployed instance. It needed n
 APM was dropped, because it never claimed APM — which is what the 2026-09-01 narrowing was
 for.
 
+### 2026-09-02 — Phase 6: the MCP server
+
+Built, exercised against the live API, and wired into Claude Desktop's config. What is not
+done is the part only a human can do: restarting Desktop and running the four example
+queries.
+
+- **`ApiClient` exposes `get` and nothing else.** The read-only rule is already enforced
+  where it counts — the bearer filter chain permits `GET /api/**` and denies the rest
+  (2026-09-01) — and that was verified again here against the deployed instance rather than
+  assumed: `POST`, `PUT`, `PATCH` and `DELETE` with the real MCP token all return 403, and
+  the probe created nothing. Giving the client no way to *spell* a write is not a second
+  guarantee, it is a way of making the first one unbreakable by accident from this side.
+- **Four narrow tools, not one query tool.** `PLAN.md` argued this as a prompt-engineering
+  point — Claude picks better from specific descriptions. The stronger reason is that it
+  makes the set of data that can leave the API a property of this repo rather than of what
+  somebody asks for.
+- **The tool *descriptions* are load-bearing code, and two of them encode a trap.**
+  `get_application_stats` has to tell Claude that "this month" is a calendar range for
+  `from`/`to` while `days` is rolling, or it answers a calendar question with a rolling
+  window and states it as fact (`SCHEMA.md §10.1`) — the output therefore prints the window
+  the API says it measured, above the numbers. `search_applications` has to say that partial
+  words match, or Claude "corrects" the user's term first; the backend uses an escaped regex
+  rather than `$text` for exactly that reason (`SCHEMA.md §6`).
+- **Times are rendered with their zone abbreviation attached.** `scheduledAt` is a UTC
+  instant, and "14:00" with no zone is an invitation for Claude to repeat it as a local
+  time. `en-US` is the formatting locale for one narrow reason: it renders
+  `timeZoneName: 'short'` as `PDT`, where `en-GB` renders the same field as `GMT-7`. Display
+  defaults to the machine's zone (this runs on the laptop, so that is the owner's) with
+  `APP_TIMEZONE` as an override. Same family as the `LocalDate` trap in `STATE.md §4`,
+  arriving in the presentation layer this time.
+- **`claude_desktop_config.json` must name an absolute path to `node`.** Desktop launches
+  the server with a minimal environment, not the shell's, so a bare `"node"` is not on
+  `PATH` and the server fails to start with nothing useful to show for it. Verified by
+  launching the exact configured command with `PATH=/usr/bin:/bin` from `/`. **Node here is
+  installed via nvm, so that absolute path carries a version number** and will break on the
+  next `nvm install` — recorded in `STATE.md §4` with the one-liner to repoint it, because
+  the symptom (Desktop says the server failed to start) points nowhere near the cause.
+- **Tested with a scripted stdio client rather than the MCP Inspector.** The Inspector is an
+  interactive browser UI and cannot assert anything. A script does `initialize` →
+  `tools/list` → `tools/call` across all four tools and four failure scenarios, and — the
+  part that actually matters — it parses every stdout line as JSON, which is what proves no
+  diagnostic ever leaked into the protocol stream. That is the failure this phase is most
+  likely to have, and the Inspector would not have caught it.
+
+**Found while testing, not an MCP bug: `avgDaysToFirstResponse` can be negative.** The live
+data has an application recorded as applied 2026-09-02 whose online assessment completed
+2026-08-21 — eleven days *before* it. `SCHEMA.md §9` defines the metric as
+`firstResponseAt − appliedDate` with no floor and no rule that a stage must postdate the
+application, so the mean is dragged negative and the MCP tool now reports "Average time to
+first response: -11.1 days", which is a nonsense sentence. Arithmetic confirmed against all
+three qualifying applications (−11.3, +4.7, +233.7 → 75.9 all-time, matching the API).
+Deliberately **not** fixed here: it is a data-modelling question — is a stage before
+`appliedDate` legitimate (a recruiter reached out first) or a data-entry slip? — and papering
+over it in the presentation layer would be the same "confidently wrong" failure this project
+keeps designing against, only hidden better. Recorded as an open item in `STATE.md`.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
@@ -1169,7 +1228,9 @@ takes `DD_API_KEY` through its own config, not the app's).
 | `APP_BASE_URL` | API | `https://<your-domain>` — used for the OAuth redirect |
 | `DD_API_KEY` | API (metrics) | Datadog API key for the Micrometer registry |
 | `DD_SITE` | API (metrics) | **`us5.datadoghq.com`** for this org. Datadog runs several sites (`datadoghq.com` = US1, `us3`, `us5`, `datadoghq.eu`, `ap1`) and a key is valid only on its own; a mismatch is rejected silently — no error worth noticing, no data in the UI. `application-prod.yml` builds the Micrometer `uri` from this. |
-| `API_BASE_URL` | MCP server | `https://<your-domain>` |
+| `API_BASE_URL` | MCP server | `https://<your-domain>`. https is required (localhost excepted) — the bearer token rides every request. |
+| `API_TOKEN` | MCP server | the same value as `APP_MCP_TOKEN`. Missing or blank stops the server at startup rather than producing one whose every call 401s. |
+| `APP_TIMEZONE` | MCP server | **Optional.** IANA zone for displaying interview times. Defaults to the machine's own, which is normally right since the server runs on the laptop. |
 
 Spring profiles:
 - **`local`** — points at a localhost MongoDB, permissive CORS for `http://localhost:5173`,

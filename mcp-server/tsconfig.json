@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    // NodeNext is what makes `import ... from "./foo.js"` resolve correctly for a
+    // "type": "module" package: TypeScript then follows Node's own ESM rules, which is why
+    // the relative imports in src/ carry a .js extension even though the files are .ts.
+    // That looks wrong the first time you see it and is correct — the extension refers to
+    // the *emitted* file, and Node requires it.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2023"],
+    // @types/node must be named explicitly. It supplies `process`, and also the runtime
+    // globals this server leans on — `fetch`, `Response`, `URL`, `AbortSignal` — which are
+    // otherwise only declared by the DOM lib, and there is no DOM here.
+    "types": ["node"],
+
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "declaration": false,
+
+    // CLAUDE.md §11: strict, and no `any`. The flags under it are not implied by
+    // `strict`; each rules out a class of mistake that would otherwise reach Claude as a
+    // confidently wrong answer rather than as an error.
+    "strict": true,
+    // Index access returns `T | undefined`, so `stages[0]` must be checked before use.
+    "noUncheckedIndexedAccess": true,
+    // A `catch (e)` binding is `unknown`, forcing a narrowing step instead of `e.message`.
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"]
+}
