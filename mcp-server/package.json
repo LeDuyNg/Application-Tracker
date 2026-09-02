@@ -1,0 +1,26 @@
+{
+  "name": "jobtracker-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only MCP server exposing the Job Application Tracker API to Claude Desktop",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env --import tsx src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -b --noEmit false --dry 2>/dev/null || tsc --noEmit",
+    "inspect": "npx @modelcontextprotocol/inspector node --env-file=.env --import tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.2"
+  }
+}

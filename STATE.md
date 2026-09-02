@@ -26,9 +26,12 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** **Phase 6 — MCP server.** Phases 1–5 are done and merged. The app is
-live at `https://app4jobtrack.me`, auto-deploying from `main`, with metrics, a dashboard and
-an error-rate monitor in Datadog (**us5**). Next branch: `phase-6-mcp`.
+**Current phase:** **Phase 6 — MCP server**, on branch `phase-6-mcp` (not yet merged).
+The server is **built, tested against the live API, and wired into Claude Desktop's config**.
+What is left needs a human at the machine: restart Claude Desktop, confirm the four tools
+appear, run the example queries, save the transcripts. Phases 1–5 are done and merged. The
+app is live at `https://app4jobtrack.me`, auto-deploying from `main`, with metrics, a
+dashboard and an error-rate monitor in Datadog (**us5**).
 
 *Phase 5, closed 2026-09-02:* three domain counters
 (`jobtracker.applications.created`, `.stages.added` by `stage_type`, `.api.errors` by
@@ -114,31 +117,58 @@ pointing into merged history. Harmless; delete them whenever.
   removed, `@Valid` moved onto type arguments (HV000271), collection + page-size caps,
   `deploy/nginx-*.conf` written early for rate limiting and `X-Forwarded-Proto`, and
   `/actuator/health` narrowed to loopback callers. **103 tests green.** Full reasoning in `CLAUDE.md §6`, entry "Pre-deploy security pass".
+- **Phase 6 — MCP server (built, not yet driven from Claude Desktop).** `mcp-server/` on
+  the MCP SDK 1.30 over stdio, TypeScript 6 + zod 4 (matching `frontend/`). Four read-only
+  tools — `get_application_stats`, `list_pending_followups`, `search_applications`,
+  `get_upcoming_interviews` — each one endpoint, returning text rather than JSON because
+  Claude reads the result as context. `ApiClient` exposes **`get` and nothing else**.
+  Verified with a scripted stdio client (`initialize` → `tools/list` → `tools/call` on all
+  four against the live API, plus four failure scenarios), which also proves stdout carries
+  nothing but protocol frames. **Read-only confirmed against the deployed instance:** `POST`,
+  `PUT`, `PATCH`, `DELETE` with the real MCP token all return 403 and the probe created
+  nothing. `claude_desktop_config.json` is written (previous version backed up beside it)
+  and its exact command verified under `PATH=/usr/bin:/bin` from `/` — which shows the
+  absolute path is robust, but does **not** show a bare `"node"` would fail; see the
+  `command` row in §4.
 
 ### Open
 
-0. **Check the real custom-metric series count** — Datadog → *Plan &amp; Usage → Custom
+1. **Restart Claude Desktop and run the four example queries** (`PLAN.md` Phase 6). The
+   config is in place and validated; Desktop only reads it at startup. Save the transcripts
+   — Phase 7's README wants them. Then merge `phase-6-mcp` into `main` `--no-ff`.
+2. **`avgDaysToFirstResponse` can be negative, and currently is.** Found while testing the
+   MCP stats tool. The CodePath application is recorded as applied `2026-09-02` with an
+   online assessment completed `2026-08-21` — eleven days *before* it. `SCHEMA.md §9` puts
+   no floor on the metric and no rule that a stage must postdate `appliedDate`, so the mean
+   is dragged negative and the tool reports "Average time to first response: -11.1 days".
+   Arithmetic checks out against all three qualifying applications (−11.3, +4.7, +233.7 →
+   75.9 all-time, matching the API), so the aggregation is doing exactly what it was told.
+   **The question is which is wrong**: the data (was the applied date mistyped?), or the
+   definition (should a stage before `appliedDate` clamp to zero, or be excluded?).
+   Deliberately not patched in the MCP layer — hiding it there would be the same
+   confidently-wrong failure, only better concealed.
+3. **Check the real custom-metric series count** — Datadog → *Plan &amp; Usage → Custom
    Metrics* — after a day of traffic. `MetricsConfig`'s budget table is arithmetic; that page
    is truth, and a series only exists once its tag combination has occurred, so checking
    early under-reports. Lever if it is near 100: `ALLOWED_THIRD_PARTY`, dropping
    `jvm.memory.used` (~16 series) first.
-1. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Three applications entered
+4. **Backups are still deferred.** Atlas M0 has no automated backup, no undelete and no
+   point-in-time restore. There is now real data — **6 applications across 4 companies** as
+   of 2026-09-02 — so this has stopped being hypothetical, and the argument only gets worse
+   as it grows. `RUNBOOK.md` Step 12.
+5. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
+   iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
+   flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
+6. **`npm run preview`** on the built `dist/` — never run locally. Largely moot now that CI
+   builds and deploys the real thing on every push.
+7. **Re-run `nginx -t` on the VPS** at some point after certbot's next renewal, and confirm
+   the security headers still come back — certbot rewrites the vhost, and the headers are
+   `add_header` directives it has no reason to preserve deliberately.
+8. ~~**The backfill and dogfooding pass.**~~ **Done 2026-09-02.** Applications entered
    through the live UI at `https://app4jobtrack.me`, chosen to differ in status so the
    funnel, follow-ups and filters had signal. Nothing broke. **This closes Phase 3** —
    `PLAN.md`'s "run your real job-search workflow end-to-end" bar is met, against the
    deployed app rather than locally, which is a stronger result than the plan asked for.
-2. **Backups are still deferred.** Atlas M0 has no automated backup, no undelete and no
-   point-in-time restore. There is now real data, so this has stopped being hypothetical —
-   three applications is small, but the argument only gets worse as it grows.
-   `RUNBOOK.md` Step 12.
-3. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
-   iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
-   flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
-4. **`npm run preview`** on the built `dist/` — never run locally. Largely moot now that CI
-   builds and deploys the real thing on every push.
-5. **Re-run `nginx -t` on the VPS** at some point after certbot's next renewal, and confirm
-   the security headers still come back — certbot rewrites the vhost, and the headers are
-   `add_header` directives it has no reason to preserve deliberately.
 
 ### Phase 0 — complete
 Datadog is redeemed, shows **Pro**, and an API key is generated. The
@@ -191,7 +221,17 @@ npm run dev      # http://localhost:5173 — proxies /api, /oauth2, /login → :
 npm run build    # tsc -b && vite build  (this is the type-check too)
 npm run lint     # oxlint
 npm run preview  # serve the built dist/
+
+cd mcp-server
+npm install
+npm run build    # tsc -> dist/   (Claude Desktop runs the built file, not tsx)
+npm run dev      # stdio server from src/ via tsx, reading .env
+npm run inspect  # MCP Inspector, for poking at tools by hand
 ```
+
+The MCP server needs `mcp-server/.env` with `API_BASE_URL` and `API_TOKEN`; the token must
+equal `APP_MCP_TOKEN` on the VPS. Read it back with
+`ssh app4jobtracker 'sudo grep APP_MCP_TOKEN /etc/jobtracker/jobtracker.env'`.
 
 Full local stack: `docker start jt-mongo`, then the backend on `local`, then `npm run dev`.
 
@@ -232,6 +272,10 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `mongodump` prints the URI on failure | Password included, straight into scrollback. Pipe probe output through `sed -E 's\|(//)[^:]*:[^@]*(@)\|\1USER:PASS\2\|'`. |
 | `ssh user@ip` vs a `Host` alias | A `~/.ssh/config` `Host myalias` block matches the **alias**, not the address inside it. `ssh ubuntu@<ip>` matches nothing, falls back to default identities, and fails `Permission denied (publickey)` on a box reachable a second earlier by alias. |
 | `.with(csrf())` mutates the **shared** Spring context | `SecurityMockMvcRequestPostProcessors.csrf()` swaps the `CsrfTokenRepository` on the shared `CsrfFilter` bean for a test double holding the token in a request attribute, not a cookie — and the swap lasts the rest of the JVM run, because the four `@AutoConfigureMockMvc` IT classes share one cached context. Any test asserting on a real `XSRF-TOKEN` cookie therefore only passes if it runs before every `.with(csrf())` test anywhere. Fixed by isolating that assertion in `CsrfCookieIT` with `@DirtiesContext(BEFORE_CLASS)`. |
+| `command` in `claude_desktop_config.json`, under nvm | **Not the trap it was first written up as.** Desktop does *not* launch with a stripped environment — its own log (`~/Library/Logs/Claude/mcp-server-job-tracker.log`) shows it assembling a PATH that includes `~/.nvm/versions/node/v25.2.1/bin`, so a bare `"node"` would probably resolve. The genuine trade-off: an **absolute path** is immune to however Desktop resolves PATH (undocumented, version-dependent) but carries a version number and **breaks on the next `nvm install`**; a bare **`"node"`** depends on that harvesting but follows nvm's default and survives upgrades. Currently absolute, because it is verified working. Symptom if it breaks: Desktop reports the server failing to start, pointing nowhere near the cause — `mcp-server/README.md` has the one-liner to repoint it. |
+| stdout on an MCP stdio server | stdout carries protocol frames. One `console.log` corrupts the stream and the server "won't connect", with no error explaining why. Everything diagnostic goes to **stderr**, which Desktop captures. Assert it: parse every stdout line as JSON in a test client. |
+| `@types/node` on a DOM-less tsconfig | With `lib: ["es2023"]` and no `"types"` entry, `process`, `fetch`, `Response`, `URL` and `AbortSignal` are all "Cannot find name" even though `@types/node` is installed. Set `"types": ["node"]` explicitly. |
+| Reading a `Response` body twice | `await response.text()` consumes the stream; a second read throws. If you want both a message *and* the parsed problem JSON from one error response, read the text once and derive both from it. |
 | Maven `runOrder` defaults to `filesystem` | Which enumerates differently on macOS and on a Linux runner, so the two disagree about test-class order. Anything sensitive to shared-context state then passes locally and fails in CI **with identical code** — the hardest kind of failure to believe. Pinned to `alphabetical` for Surefire and Failsafe in `pom.xml`. Reproduce a CI ordering locally with `-Dfailsafe.runOrder=reversealphabetical`. |
 
 **General lesson:** this project runs Spring Boot 4 / Jackson 3 / Spring Data 5, and most

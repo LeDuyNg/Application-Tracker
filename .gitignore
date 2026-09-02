@@ -21,6 +21,9 @@ dist/
 dist-ssr/
 *.local
 npm-debug.log*
+# `tsc -b` incremental state. Lands next to tsconfig.json, not in outDir, so `dist/` above
+# does not cover it.
+*.tsbuildinfo
 
 # ---- Logs ----
 *.log

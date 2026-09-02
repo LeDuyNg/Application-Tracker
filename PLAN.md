@@ -850,49 +850,59 @@ with the bearer token.
 > exactly what data leaves the API.
 
 ### Setup
-- [ ] `mcp-server/`: `npm init`, install `@modelcontextprotocol/sdk`, `zod`; dev deps
-      `typescript`, `tsx`, `@types/node`.
-- [ ] `tsconfig.json` (`strict`, `module: nodenext`, `target: es2022`).
-- [ ] `.env` (gitignored): `API_BASE_URL=https://<your-domain>`, `API_TOKEN=<APP_MCP_TOKEN>`.
-      Note this is for **local dev only** and needs `dotenv` (or `node --env-file`) to be
-      read at all — Claude Desktop passes these through its own `env` block in
-      `claude_desktop_config.json`, not from your `.env`.
-- [ ] Branch `phase-6-mcp`.
+- [x] `mcp-server/`: `npm init`, install `@modelcontextprotocol/sdk`, `zod`; dev deps
+      `typescript`, `tsx`, `@types/node`. SDK **1.30.0**, zod **4.5.4**, TypeScript
+      **~6.0.2** — matching `frontend/`'s versions rather than taking TS 7, so the repo has
+      one TypeScript line to reason about, not two.
+- [x] `tsconfig.json` (`strict`, `module: nodenext`, `target: es2022`).
+      **`"types": ["node"]` must be set explicitly.** Without it `process`, `fetch`,
+      `Response`, `URL` and `AbortSignal` are all "Cannot find name", because `lib` here is
+      `es2023` with no DOM and @types/node is not picked up implicitly.
+- [x] `.env` (gitignored): `API_BASE_URL=https://<your-domain>`, `API_TOKEN=<APP_MCP_TOKEN>`.
+      Read straight off the VPS into the file without passing through a terminal buffer.
+      `npm run dev` passes `node --env-file=.env`; no `dotenv` dependency needed. Claude
+      Desktop does not read it — it passes its own `env` block.
+- [x] Branch `phase-6-mcp`.
 
 ### Implementation (`src/`)
-- [ ] `apiClient.ts` — `fetch` wrapper: prepends `API_BASE_URL`, sets
+- [x] `apiClient.ts` — `fetch` wrapper: prepends `API_BASE_URL`, sets
       `Authorization: Bearer ${API_TOKEN}`, throws on non-2xx with the response body,
       returns parsed JSON. Typed against the same DTO shapes as the backend.
-- [ ] `index.ts` — create an **`McpServer`** (the SDK's high-level API: `registerTool`
+- [x] `index.ts` — create an **`McpServer`** (the SDK's high-level API: `registerTool`
       handles the `list_tools` / `call_tool` plumbing and the zod-to-JSON-Schema conversion
       for you) and connect a `StdioServerTransport`. The low-level `Server` class with
       hand-written request handlers also works, but it's more code for no benefit here.
-- [ ] `tools/getApplicationStats.ts` — input `{ days?: number, from?: string, to?: string }`
+- [x] `tools/getApplicationStats.ts` — input `{ days?: number, from?: string, to?: string }`
       → `GET /api/stats` → a compact text summary (counts by status, funnel,
       response/ghost/offer rates). **The tool description must tell Claude that "this
       month" means a calendar month and should be sent as `from`/`to`, while `days` is a
       rolling window** — and the output should state which window it used, so a rolling
       30-day count is never reported as "this month".
-- [ ] `tools/listPendingFollowups.ts` — no input → `GET /api/applications/followups` →
+- [x] `tools/listPendingFollowups.ts` — no input → `GET /api/applications/followups` →
       list company, role, `followUpDate`, days overdue. The response has two groups —
       follow-ups *due* and pipelines *gone quiet* (`lastContactAt` older than 14 days) —
       label them separately in the text; the second is what answers "which companies
       haven't I heard back from in 2+ weeks?".
-- [ ] `tools/searchApplications.ts` — input `{ query: string }` →
+- [x] `tools/searchApplications.ts` — input `{ query: string }` →
       `GET /api/applications?q=` → top ~15 as company / role / status / current stage /
       applied date. Partial words work (the backend uses a regex, not `$text`), so
       "everything related to Stripe" and "strip" both hit.
-- [ ] `tools/getUpcomingInterviews.ts` — input `{ days: number }` (default 7) →
+- [x] `tools/getUpcomingInterviews.ts` — input `{ days: number }` (default 7) →
       `GET /api/applications/interviews?days=` → list datetime, company, role, stage type,
       format, interviewers.
-- [ ] Each tool: zod schema, a clear description written for Claude ("Use this when the
+- [x] Each tool: zod schema, a clear description written for Claude ("Use this when the
       user asks about ... "), graceful error text if the API call fails.
 
 ### Testing & wiring
-- [ ] `npx @modelcontextprotocol/inspector npx tsx src/index.ts` — exercise each tool with
-      sample inputs; confirm outputs.
-- [ ] Build: `tsc` → `dist/index.js` (or run via `tsx` directly from the config).
-- [ ] Add to `claude_desktop_config.json`
+- [x] ~~`npx @modelcontextprotocol/inspector`~~ — exercised with a **scripted stdio client**
+      instead (`initialize` → `tools/list` → `tools/call` for all four tools against the
+      live API, plus four failure scenarios). The Inspector is an interactive browser UI and
+      cannot assert; a script can, and it also proved stdout stays pure protocol, which is
+      the failure mode that matters here. `npm run inspect` is still wired up for poking by
+      hand.
+- [x] Build: `tsc` → `dist/index.js`. Claude Desktop is pointed at the built file rather
+      than `tsx`, so the tool path has no dev dependency in it.
+- [x] Add to `claude_desktop_config.json`
       (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
       ```json
       { "mcpServers": {
@@ -902,7 +912,14 @@ with the bearer token.
             "env": { "API_BASE_URL": "https://<your-domain>", "API_TOKEN": "<APP_MCP_TOKEN>" }
       } } }
       ```
-- [ ] Restart Claude Desktop; confirm the tools appear.
+- [x] Verified the configured command works the way Claude Desktop will run it: the exact
+      `command`/`args`/`env` from the config, launched with `PATH=/usr/bin:/bin` from `/`,
+      completes a handshake and returns live data. That shows an **absolute path to `node`**
+      is robust; it does *not* show a bare `"node"` would fail, and Desktop's own log shows
+      it building a PATH that would find one. See `CLAUDE.md §6` for the trade-off under
+      nvm.
+- [ ] **Restart Claude Desktop; confirm the tools appear.** Needs a human — the config is
+      written and validated, but Desktop only reads it at startup.
 - [ ] Run the example queries and save transcripts:
   - "How many applications have I sent this month?"
   - "Which companies haven't I heard back from in 2+ weeks?"
@@ -912,6 +929,13 @@ with the bearer token.
 **Done when:** all four tools work from Claude Desktop against the live API; the example
 queries return correct answers; transcripts are saved for the README; the bearer token is
 confirmed read-only (a tool cannot mutate data even if asked).
+
+**Status (2026-09-02): built, tested against the live API, and wired in — not yet driven
+from Claude Desktop itself.** All four tools return correct data over a real stdio
+handshake, and the read-only guarantee is confirmed against the deployed instance:
+`POST` / `PUT` / `PATCH` / `DELETE` with the MCP token all return **403** and nothing was
+created. What is left needs a human: restart Claude Desktop, confirm the tools appear, run
+the four example queries, save the transcripts.
 
 **Gotchas:**
 - MCP stdio servers must not write anything but protocol messages to **stdout** — send all
