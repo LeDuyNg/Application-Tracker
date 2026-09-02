@@ -21,10 +21,11 @@ Four deliverables, all built around one data store:
 
 1. **CRUD app** — Spring Boot REST API + React dashboard over MongoDB.
 2. **Datadog integration** — custom metrics + a dashboard + one alert, against the
-   *deployed* instance, plus APM traces captured from a **local** run during the 14-day
-   trial. The 1 GB host cannot carry the Datadog Agent alongside the JVM, and only one
-   instance is available — see §6. Say which is which; a smaller true claim beats a vague
-   larger one.
+   *deployed* instance. **No APM, anywhere**: it is a separately-billed SKU with no trial
+   offerable on the student Pro plan, and the 1 GB host could not carry the Agent beside
+   the JVM in any case (§6, 2026-09-02). Metrics reach Datadog over HTTPS via Micrometer
+   and never needed an Agent, so this deliverable is unaffected. A smaller true claim
+   beats a vague larger one.
 3. **MCP server** — a thin, read-only layer letting Claude Desktop answer natural-language
    questions about the job search ("how many applications this month?", "what interviews
    do I have this week?").
@@ -45,10 +46,12 @@ Four deliverables, all built around one data store:
 > MongoDB Atlas) with Datadog metrics, dashboards and alerting, and an MCP server enabling
 > natural-language queries over application status and interview stages via Claude Desktop.
 
-*(Says "metrics, dashboards and alerting", not "APM": those are what run continuously
-against the deployed instance. APM tracing is exercised locally during the trial and is
-worth discussing in an interview — but claiming it as a production capability would not
-survive a follow-up question.)*
+*(Says "metrics, dashboards and alerting", not "APM", and that is the whole claim — there
+is no tracing in this project, locally or in production (§6, 2026-09-02). The bullet was
+written this way before that was forced, which is why it needed no edit when it was.
+"Why no APM?" has a real answer worth giving in an interview: a 1 GB host, an Agent needing
+~0.5 GB beside a JVM already at ~500 MB, one instance in the tenancy, and a separately-billed
+tracing SKU.)*
 
 ---
 
@@ -57,7 +60,7 @@ survive a follow-up question.)*
 | | |
 |---|---|
 | **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (103 tests). A pre-deploy security pass has been applied (§6, 2026-09-02). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
-| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. Datadog is redeemed and on **Pro** with an API key generated. The APM-trial-availability check is **done, and the answer is no** (2026-09-02, §6) — no APM trial is offerable on student Pro, so Phase 5's APM subsection needs a decision. Phase 0 is otherwise complete. |
+| **Phase 0 status** | **Complete.** Domain, Oracle VM, Atlas M0, Google OAuth client all done. Datadog redeemed, on **Pro**, API key generated. The APM-trial-availability check came back **no**, and the response was to **drop tracing from the project entirely** — see §6 (2026-09-02) and §14. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
@@ -65,7 +68,7 @@ survive a follow-up question.)*
 | **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–3, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-4-deploy`. |
 | **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
-| **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
+| **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included and no trial is offerable on top of it; tracing is out of scope (§6, §14). |
 
 Update this table at the end of every working session.
 
@@ -76,14 +79,13 @@ Update this table at the end of every working session.
 ### Backend
 | Thing | Choice | Notes |
 |---|---|---|
-| Language | **Java 25 (LTS)** | GA Sep 2025. `dd-trace-java` fully supports it. |
+| Language | **Java 25 (LTS)** | GA Sep 2025. Chosen as the current LTS; the original tie-breaker was `dd-trace-java` support, which no longer applies now that tracing is out of scope (§14) — the LTS argument stands on its own. |
 | Framework | **Spring Boot 4.1.x** (on `4.1.1`) | Spring Framework 7. Baseline Java 17+. **Jackson 3** is the default JSON mapper — package is `tools.jackson.*`, not `com.fasterxml.jackson.*`. |
 | Build tool | **Maven** | Single module in `backend/`. Use the `mvnw` wrapper (IntelliJ picks it up automatically). |
 | Persistence | **Spring Data MongoDB** | Repositories + `MongoTemplate` for aggregations. |
 | Security | **Spring Security** + `spring-boot-starter-oauth2-client` | Google OAuth2 login for the SPA; a static bearer token for the MCP server. |
 | API docs | **springdoc-openapi 3.x** | Swagger UI at `/swagger-ui.html` — useful for manual testing while learning. **Pin the 3.x line**: springdoc 2.x targets Boot 3 / Framework 6 and will not work on Boot 4. **Disabled in prod** (`springdoc.api-docs.enabled=false`) — see §6. |
 | Metrics | **Micrometer** + `micrometer-registry-datadog` | Pushes custom metrics straight to the Datadog API over HTTPS — independent of whether the Agent is installed. Budget: ~100 custom timeseries (see §6). |
-| APM | **`dd-trace-java`** javaagent, **local only** | Never runs on the VPS: tracing needs a Datadog Agent to send to, and the Agent plus a JVM does not fit in 1 GB. Exercised on the laptop during the 14-day trial for screenshots and interview material. APM is also a separate paid SKU, not part of student-pack Pro (see §6). |
 | Tests | JUnit 5, **Testcontainers** (real MongoDB), Spring Boot Test | `*Test` = unit (Surefire), `*IT` = integration (Failsafe). Use the `mongo:8` image to match the Atlas major version. |
 
 ### Frontend
@@ -115,7 +117,7 @@ Update this table at the end of every working session.
 | Thing | Choice | Notes |
 |---|---|---|
 | Host | **Oracle Cloud "Always Free" — `VM.Standard.E2.1.Micro` (AMD x86)** | **1/8 OCPU baseline (bursts to 1 full OCPU), 1 GB RAM.** One instance. Chosen because A1 ARM capacity is unobtainable — see §6. 1 GB demands a tuned JVM and swap; it also rules out running the Datadog Agent alongside the app. |
-| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for `dd-trace-java` and any native dependency. |
+| OS | **Ubuntu 24.04 (x86_64)** | Default login user `ubuntu`. x86 rather than arm64 since the shape changed — one less architecture caveat for any native dependency. |
 | Runtime deploy | **Fat JAR + `systemd`** — **no Docker on the VPS** | Mongo is managed (Atlas), so the box only runs the API + Nginx; Docker's parity/autodiscovery wins don't apply and it costs memory. |
 | Reverse proxy / TLS | **Nginx + certbot (Let's Encrypt)** | Same pattern the owner used on a prior project. Serves the SPA static build and proxies `/api`, `/oauth2`, `/login` to `127.0.0.1:8080`. |
 | CI/CD | **GitHub Actions** | `mvn verify` → `mvn package` → `scp` JAR to the VPS → `ssh systemctl restart`. Frontend: `npm run build` → `rsync dist/` → `/var/www/jobtracker`. |
@@ -146,8 +148,9 @@ Update this table at the end of every working session.
   Claude Desktop ──stdio──▶  MCP server (local, TS)  ───┘  (calls the deployed /api)
 
   Spring Boot API ──HTTPS──▶ Datadog API   (custom metrics via Micrometer, always)
-  Local dev run + Datadog Agent (laptop) ──▶ Datadog   (APM traces, trial window only —
-                                                        never on the 1 GB VPS)
+
+  There is no Datadog Agent anywhere in this diagram, and that is deliberate: Micrometer
+  pushes over the API, and tracing is out of scope entirely (§6, §14).
 ```
 
 ### Request flows
@@ -162,8 +165,8 @@ Update this table at the end of every working session.
   Claude.
 - **Metrics:** the deployed API pushes custom metrics to Datadog continuously via the
   Micrometer Datadog registry — over HTTPS, no agent involved. **There is no Datadog Agent
-  in production**, so there are no production traces; APM is exercised on a local run during
-  the trial only (§6).
+  anywhere**, in production or locally, and therefore no traces at all. Tracing is a
+  declared non-goal (§14); the reasoning is in §6 (2026-09-02).
 
 ---
 
@@ -266,7 +269,7 @@ Each entry: what was decided, why, what was rejected. **Append, don't rewrite.**
   dashboards, and monitors are.
   *(**Superseded** by the 2026-09-01 review entry below: the GitHub Student Developer Pack
   provides Pro, so the Agent stays permanently. The APM half still stands — APM is a
-  separate paid SKU on every plan.)*
+  separate paid SKU on every plan.)* *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
 - **MCP server in TypeScript, stdio transport.** Most-trodden path for Claude Desktop;
   official SDK; runs locally and calls the *deployed* API so validation stays in one
   place.
@@ -304,7 +307,7 @@ Each is a change to what was previously written here or in `SCHEMA.md` / `PLAN.m
   The APM-is-a-separate-SKU half still stands.)*
   **APM is unchanged and still trial-only**: it is a separate paid SKU (~$31/host/mo) and
   is *not* part of Pro, student pack or otherwise. Micrometer's registry pushes over the
-  API and does not depend on the Agent, so it stays as-is either way.
+  API and does not depend on the Agent, so it stays as-is either way. *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
 - **Custom-metric budget: ~100 timeseries.** Pro allots 100 custom metrics *per host* and
   we have one host. Datadog counts unique metric-name + tag-value combinations, and
   Micrometer expands one timer into several metrics (count/sum/avg/max), so exporting
@@ -400,7 +403,9 @@ description implies. This supersedes the "APM uses the second free micro" bullet
   Agent on the laptop, drive it with the `.http` collection, capture the flame graphs and
   the service map. This is a real, working `dd-trace-java` setup and gives genuine interview
   material about instrumentation and trace sampling — it is simply not the deployed
-  instance, and the README says so.
+  instance, and the README says so. *(**Superseded** by the 2026-09-02 entry "Tracing dropped" — there is no APM in this project at all.)*
+  The premise here — that a 14-day APM trial exists to be spent — turned out to be false;
+  see 2026-09-02.
 - **The claims were narrowed to match.** §1's deliverable and the resume bullet now say
   "metrics, dashboards and alerting" for production and name APM separately as local. This
   is the honest version: a reviewer who asks "so what does your APM show in prod?" gets a
@@ -873,6 +878,38 @@ JVM already at ~500 MB, one instance in the tenancy, and a tracing SKU that is s
 billed. That is a capacity-and-cost tradeoff explained from first principles, which is
 stronger material than a flame graph captured on a laptop.
 
+### 2026-09-02 — Tracing dropped from the project (Option A)
+
+Follows directly from the entry above. With no APM trial offerable, the choice was: drop
+tracing, stand up a second Datadog org on its own evaluation trial, or exercise tracing
+locally through OpenTelemetry to a Jaeger/Tempo container. **Dropped.**
+
+- **Nothing that was claimed had to change**, which is what made this the cheap option.
+  §1's deliverable and the resume bullet were narrowed on 2026-09-01 to say "metrics,
+  dashboards and alerting" for production, with APM named separately as local-only. Removing
+  the local half left every outward claim exactly as it was.
+- **Rejected: a second Datadog org on a fresh evaluation trial.** It would have worked, and
+  it means two orgs and two API keys, one of which is production's. The realistic failure is
+  pointing the local Agent at the prod key, or the reverse — a live credential mishandled for
+  the sake of screenshots. Not a good trade.
+- **Rejected: OpenTelemetry + a local collector.** Genuinely appealing: no trial clock, real
+  flame graphs, and arguably the more transferable skill. Declined because it adds a tool and
+  a container to a project whose §12 premise is that every dependency is something the owner
+  must learn to debug, and whose §14 has already turned down larger things for the same
+  reason. **This is the one to revisit** if distributed tracing is ever wanted on the CV —
+  it is the right approach, it just is not this project's job.
+- **What the observability deliverable is now, in full:** custom metrics pushed by Micrometer
+  straight to the Datadog API, a dashboard, and one error-rate monitor — against the deployed
+  instance, at ~13-month retention on student Pro. No Agent anywhere, in production or
+  locally. Phase 5 loses its APM subsection and its wind-down step and is otherwise unchanged.
+- **The custom-metric budget still binds.** ~100 timeseries per host, and Micrometer expands
+  one timer into several metrics — that constraint came from Pro, not from APM, and dropping
+  tracing does not relax it. The `MeterFilter` on `http.server.requests` is still required.
+
+**Recorded as a non-goal, not an omission.** §14 now names APM explicitly, with the reasoning,
+so it reads as a decision to anyone reviewing the repo — which is the same convention already
+applied to frontend tests and Kubernetes.
+
 ---
 
 ## 7. Data model (summary — full detail in `SCHEMA.md`)
@@ -1147,8 +1184,19 @@ Full steps in `deploy/RUNBOOK.md` (written in Phase 4). Summary:
 - **Email/calendar notifications.** `followUpDate` and `get_upcoming_interviews` surface
   what's due; no push notifications.
 - **Native mobile app.** Responsive web only, and even that is a stretch goal.
-- **GraalVM native image.** Kills the `dd-trace-java` javaagent path and the build is
-  painful on 2 ARM cores.
+- **GraalVM native image.** The original reason was that it kills the `dd-trace-java`
+  javaagent path; with tracing dropped that no longer applies, but the build is still
+  painful and buys nothing here — a single-user API's startup time is not a problem worth
+  a native-image toolchain.
+- **APM / distributed tracing, in any form.** Not an oversight and not a casualty of the
+  1 GB box alone: Datadog APM is a separately-billed SKU with no trial offerable on top of
+  the student Pro plan (§6, 2026-09-02), and the alternatives — a second Datadog org on its
+  own evaluation trial, or OpenTelemetry to a local Jaeger/Tempo — were both considered and
+  declined. The first risks cross-wiring a prod API key for the sake of screenshots; the
+  second adds a tool to a project that deliberately keeps its dependency count low (§12).
+  The observability story is custom metrics, a dashboard and an alert, on a genuinely
+  deployed service — and "why is there no APM?" is answerable from first principles, which
+  is better material than a flame graph captured on a laptop.
 - **Kubernetes / containers on the VPS.** See §6.
 - **Frontend and end-to-end tests.** Deliberate: the backend carries the test story
   (unit + Testcontainers ITs on every endpoint), and the SPA is a single-user dashboard

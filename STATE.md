@@ -91,17 +91,20 @@ pointing into merged history. Harmless; delete them whenever.
 4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
    authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 
-### Phase 0 — complete, with one consequence to act on
+### Phase 0 — complete
 Datadog is redeemed, shows **Pro**, and an API key is generated. The
 **APM-trial-availability check is done and the answer is no** (2026-09-02) — APM is a
 separate paid SKU and no trial is offerable on top of student Pro. Found at the right time,
 which is the whole reason that item existed.
 
-Nothing already claimed is affected: §1 and the resume bullet were narrowed on 2026-09-01
-and never promised production APM. **Open decision:** drop tracing from the project, or
-exercise it locally via OpenTelemetry + a local collector instead of `dd-trace-java`.
-Phase 5's APM subsection and `CLAUDE.md §1` deliverable 2 both need editing once that is
-settled. See `CLAUDE.md §6`, entry "APM is not offerable on the student Pro plan".
+**Decided: tracing is dropped from the project entirely** (Option A). A second Datadog org on
+a fresh evaluation trial and OpenTelemetry-to-a-local-collector were both considered and
+declined — see `CLAUDE.md §6`, "Tracing dropped", for why. Nothing outwardly claimed changed:
+§1 and the resume bullet were already narrowed on 2026-09-01 and never promised production
+APM. `CLAUDE.md §1/§2/§3/§4/§14` and `PLAN.md` Phase 5 are all updated; APM is now a named
+non-goal in §14 rather than an omission.
+
+Phase 5 is therefore metrics + dashboard + one alert, and nothing on a clock.
 
 ### Gaps noticed, deliberately not built
 - ~~No logout endpoint / button.~~ **Done** — `POST /api/logout` → 204 on the browser
@@ -187,13 +190,16 @@ Phase 0 is **paused, not finished**. None of it blocks Phase 1 except the Atlas 
       1 GB RAM, x86), **one instance only**. A1 ARM was unobtainable. See `CLAUDE.md §6`.
 - [x] MongoDB Atlas M0 cluster
 - [x] Google Cloud OAuth client
-- [ ] Datadog student-pack redemption, and the **APM-trial-availability check** — the one
-      Phase 0 item with no recovery path if discovered late
+- [x] Datadog student-pack redemption, and the **APM-trial-availability check** — the one
+      Phase 0 item with no recovery path if discovered late. Done 2026-09-02: Pro confirmed,
+      API key generated, no APM trial offerable → tracing dropped (`CLAUDE.md §6`).
 
 **Consequence of the 1 GB single host, already propagated through the docs:** no Datadog
-Agent in production, therefore no production APM traces. APM is exercised locally during the
-trial. The resume bullet and §1 deliverables were narrowed to match — see `CLAUDE.md §6`,
-entry "Only one instance". Do not quietly widen those claims back.
+Agent anywhere, therefore no host infra metrics for the box. Combined with the 2026-09-02
+finding that no APM trial is offerable, **there is no tracing in this project at all** — a
+named non-goal in `CLAUDE.md §14`, not an omission. The resume bullet and §1 deliverables
+were narrowed on 2026-09-01 and needed no further edit. **Do not quietly widen those claims
+back**: production is custom metrics, a dashboard and one alert.
 
 ---
 
