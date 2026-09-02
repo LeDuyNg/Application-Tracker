@@ -53,6 +53,15 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+          # An unset secret writes an empty file, and ssh then fails with a bare
+          # "Host key verification failed" that says nothing about which of the four
+          # secrets is missing. Fail here instead, where the message can be useful.
+          if ! grep -q ssh ~/.ssh/known_hosts; then
+            echo "::error::SSH_KNOWN_HOSTS is empty or malformed. Generate it with:"
+            echo "::error::  ssh-keyscan ${{ secrets.SSH_HOST }}"
+            echo "::error::and paste every output line into the repo secret."
+            exit 1
+          fi
 
       # --delete removes files no longer in the build. Safe here and necessary: Vite emits
       # content-hashed filenames, so without it every deploy leaves the previous bundle
