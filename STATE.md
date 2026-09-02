@@ -26,51 +26,72 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 2 (authentication) — **code complete**. One acceptance criterion
-cannot be checked until Phase 3 exists; see below.
-**Branch:** `phase-2-auth`, cut from `phase-1-backend-crud`. Neither is merged to `main`,
-which is still docs-only.
+**Current phase:** Phase 3 — React SPA. **Functional and merged to `main`. The UI is a
+deliberate first pass — the owner will iterate on it later.** The whole SPA is built and
+running: all seven pages, both forms, the stage timeline, a collapsible sidebar shell, a
+signed-out landing page, and Google login **verified end to end in a browser** (the owner
+logged in and back out). `./mvnw verify` and `npm run build` / `npm run lint` are green.
+**Branch:** `phase-3-frontend`, merged `--no-ff` into `main`.
+**`main`** now contains Phases 1–3, each phase boundary a merge commit. `./mvnw verify` was
+run on the Phase 3 tree before the merge — 102 tests green — so "main is deployable" stays
+checked rather than assumed.
 
-### Done and tested
-- **Phase 1, complete** — domain, repositories, DTOs, mappers, `CompanyService`,
+The `phase-1-backend-crud` and `phase-2-auth` branches still exist locally and on the remote,
+pointing into merged history. Harmless; delete them whenever.
+
+### Done
+- **Phase 1 — backend CRUD.** Domain, repositories, DTOs, mappers, `CompanyService`,
   `ApplicationService` (three denormalization rules), `StatsService`,
-  `ApplicationQueryService` (follow-ups / interviews / search), 16 endpoints,
-  `GlobalExceptionHandler`, and the `.http` collection. Verified against the real Atlas M0.
-- **Phase 2** — two `SecurityFilterChain` beans:
-  - *bearer chain* (`@Order(1)`, matches an `Authorization: Bearer` header): stateless, CSRF
-    off, `GET /api/**` requires `ROLE_MCP`, everything else `denyAll()`. Token compared as
-    SHA-256 digests in constant time.
-  - *browser chain* (`@Order(2)`): Google OIDC login, `AllowlistOidcUserService` checking the
-    allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out, RFC 7807
-    401/403 instead of redirects, `GET /api/me`.
-- **100 tests green** (`./mvnw verify`): 26 unit, 74 integration across seven `*IT` classes.
+  `ApplicationQueryService` (follow-ups / upcoming interviews / escaped-regex search),
+  16 endpoints, `GlobalExceptionHandler` (RFC 7807), and the `.http` collection. Verified
+  against the real Atlas M0, not only Testcontainers.
+- **Phase 2 — authentication.** Two `SecurityFilterChain` beans:
+  - *bearer chain* (`@Order(1)`, matches an `Authorization: Bearer` header) — stateless,
+    CSRF off, `GET /api/**` requires `ROLE_MCP`, everything else `denyAll()`. Token compared
+    as SHA-256 digests.
+  - *browser chain* (`@Order(2)`) — Google OIDC, `AllowlistOidcUserService` checking the
+    allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
+    401/403 as `problem+json` instead of redirects, `GET /api/me`.
+- **102 tests green** (`./mvnw verify`): 26 unit, 76 integration.
+- **Phase 3 — React SPA.** `frontend/` on Vite 8 / React 19 / TS 6. `vite.config.ts`
+  proxies `/api`, `/oauth2`, `/login` → `:8080`. `src/api/` = `types.ts` (DTO mirrors),
+  `client.ts` (the one `fetch` wrapper: session cookie, `X-XSRF-TOKEN` on mutations,
+  `ApiError`, 401→login), one TanStack Query hook per operation with cross-family
+  invalidation after writes. `<App>` is an auth gate: splash → `Landing` (signed out) →
+  the routed app. `AppShell` is a **collapsible left sidebar** (localStorage-remembered,
+  icon rail + hover tooltips when collapsed) with a profile block (avatar / name / email /
+  **Sign out**). Seven pages, both entity forms on react-hook-form + zod, an inline stage
+  timeline. Theme: warm-editorial, Fraunces serif headings, one pine-green accent —
+  `styles/theme.css`, ~450 lines, no framework. **The visual design is a first pass the
+  owner has explicitly deferred refining.**
+- **Google login + logout verified in a browser.** The owner signed in with the allowlisted
+  account and signed back out. `POST /api/logout` → 204 (`LogoutIT` covers it).
 
-### Verified against the running app, not just in tests
-Unauthenticated `/api` → 401 `problem+json` with **no** `Location` header; the `XSRF-TOKEN`
-cookie present on that same rejected response; bearer token reads (200) and cannot write
-(403 on POST and DELETE); wrong and empty tokens → 401; `/actuator/health` open; Swagger
-reachable on `local`; `/oauth2/authorization/google` → Google with
-`redirect_uri=http://localhost:5173/login/oauth2/code/google`, scope `openid profile email`.
+### Phase 3 loose ends (did not block the merge; pick up before or alongside Phase 4)
+1. **A full dogfooding pass.** Login works; nobody has yet run the whole workflow —
+   create a company, an application, stages — and confirmed the dashboard widgets, filters
+   and funnel all reflect it. `PLAN.md` Phase 3's "Done when" is that bar. The DB is empty.
+2. **The UI itself.** Functional and coherent but deliberately unpolished; the owner will
+   iterate. No toast system (mutation errors render inline via `ErrorNote`); mobile is
+   flex-wrap + a sidebar-to-top-strip breakpoint, not a real responsive pass.
+3. **`npm run preview`** on the built `dist/` — never run (the `build` step itself is green).
+4. **Google Cloud Console** must have `http://localhost:5173/login/oauth2/code/google` as an
+   authorized redirect URI — it does (login worked), noted here so it is not forgotten for prod.
 
-### The one thing not verified
-**A real Google login round trip.** The `local` redirect URI points at `http://localhost:5173`
-— the Vite dev server, which does not exist until Phase 3 — so signing in cannot currently
-complete. The allowlist logic is unit-tested in isolation (allowed / other address /
-unverified / missing claim / empty list). To try it before Phase 3, register
-`http://localhost:8080/login/oauth2/code/google` in the Google client and override
-`redirect-uri` to match in `backend/config/application-local.yml`.
-
-This also means the `.http` collection's **write** requests cannot run yet: they need a real
-`JSESSIONID`. Every `GET` works now, using the MCP bearer token.
-
-**Suggested next step: Phase 3 — the React SPA.** It unblocks the login round trip as a side
-effect. Phase 0's remaining item is the **Datadog** student-pack redemption, and the
-APM-trial-availability check inside it is the one task with no recovery path if discovered
-late.
+### Phase 0 — one item left
+**Datadog student-pack redemption**, and the **APM-trial-availability check** inside it. That
+check is the only task in the project with no recovery path if it is discovered late: APM is
+a separate paid SKU, the trial is 14 days and one-shot, and finding out in Phase 5 that no
+trial is offerable means the APM screenshots have to be re-planned with the clock already
+spent.
 
 ### Gaps noticed, deliberately not built
-- **No logout endpoint.** `PLAN.md` Phase 2 does not list one and Phase 3 does not either,
-  but a login system without one is odd — worth adding when the SPA needs it.
+- ~~No logout endpoint / button.~~ **Done** — `POST /api/logout` → 204 on the browser
+  chain, "Sign out" in the sidebar profile block, `useLogout()` clears the query cache and
+  hard-navigates to `/`.
+- **No refresh-token / silent re-auth.** A lapsed session drops the user to the landing
+  page on the next call (the api client redirects to Google on a 401). Fine for one user;
+  worth a note if it ever annoys.
 
 ---
 
@@ -83,6 +104,7 @@ late.
 | MongoDB | Docker container `jt-mongo`, **mongo:8.3.8**, on `localhost:27017`. `docker start jt-mongo` after a reboot — `docker run` only ever needs to happen once. |
 | IntelliJ | Project opened at the **repo root**, `backend/` imported as a Maven module. Run config **JobTracker (local)** is committed at `.idea/runConfigurations/`. |
 | Docker | Required for Testcontainers (`./mvnw verify`). |
+| Node | **v25.2.1 / npm 11.13.0.** `frontend/` scaffolded with Vite 8, React 19, TypeScript 6 (newer than the `react-ts` template CLAUDE.md §3 anticipated — no code impact). `node_modules/` is gitignored; run `npm install` in `frontend/` on a fresh clone. |
 
 ### Commands
 
@@ -92,7 +114,16 @@ cd backend
 ./mvnw verify    # + *IT (Failsafe)      — needs Docker
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 # app: http://localhost:8080 · swagger: /swagger-ui.html · health: /actuator/health
+
+cd frontend
+npm install
+npm run dev      # http://localhost:5173 — proxies /api, /oauth2, /login → :8080
+npm run build    # tsc -b && vite build  (this is the type-check too)
+npm run lint     # oxlint
+npm run preview  # serve the built dist/
 ```
+
+Full local stack: `docker start jt-mongo`, then the backend on `local`, then `npm run dev`.
 
 IntelliJ's green arrow runs `*Test` **and** `*IT` alike, ignoring the Surefire/Failsafe
 split. Only `./mvnw verify` reproduces CI.
@@ -120,6 +151,8 @@ time and each would silently reappear if someone copied a Spring Boot 3 snippet.
 | `@Testcontainers` + `@Container` | Ties the container to a **test class** — it is stopped when that class ends, so every later `*IT` gets `Connection refused` against a cached port. Start it in a static initializer. |
 | `MongoDBContainer` import | Testcontainers 2.x ships **both** `org.testcontainers.mongodb.MongoDBContainer` and the 1.x shim `org.testcontainers.containers.MongoDBContainer`. Both compile. Use the former. |
 | `null` in a `$lte` query | `null` is not `$lte` anything, so a document with a null field silently drops out of a range query. Load-bearing for `followUpDate` (wanted) and `lastContactAt` (a bug until it was seeded on create). |
+| OAuth success `redirect-uri` vs proxy | `oauth2Login().defaultSuccessUrl("/")` sends a root-relative `/` that, behind the Vite dev proxy, resolves against the **backend** (`:8080`) — the user lands on the bare API, hits `denyAll()`, sees a naked 403. Fix: redirect to an **absolute** URL built from `app.base-url` (`:5173` local, real origin prod). See CLAUDE.md §6. |
+| `SecurityIT.csrfCookieIsNotDeferred` is order-fragile | It asserts "the first request in the run emits a fresh `XSRF-TOKEN` cookie". Adding more `.with(csrf())` tests to the same class perturbs the ordering it depends on and it fails with "No cookie". Logout tests live in their own `LogoutIT` for this reason. |
 
 **General lesson:** this project runs Spring Boot 4 / Jackson 3 / Spring Data 5, and most
 material online is Boot 3. Verify property names against the config metadata in the jars

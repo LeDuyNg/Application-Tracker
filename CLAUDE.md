@@ -56,14 +56,14 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 2 — authentication: code complete.** Two filter chains (bearer/MCP + session/OAuth2), email allowlist with `email_verified`, RFC 7807 401/403, `GET /api/me`. 100 tests green. The one thing unverified is a real Google login, which needs the Phase 3 SPA on `:5173`. |
-| **Phase 0 status** | Repo, IntelliJ and local MongoDB done. **Outstanding:** domain, Oracle VM, Atlas M0, Google OAuth client, Datadog student-pack redemption. None block Phase 1. |
+| **Current phase** | **Phase 3 — React SPA. Functional; merged to `main`. UI is a first pass the owner will iterate on.** Vite 8 / React 19 / TS 6, sidebar shell, signed-out landing page, Google login **and logout verified in a browser**. `./mvnw verify` green (102 tests). Next is Phase 4 (deploy) — but see `STATE.md` for the Phase 3 loose ends (full dogfooding pass, the UI itself). |
+| **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
-| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `phase-1-backend-crud` is pushed; `main` is still docs-only. |
-| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
+| **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1–3, each merged `--no-ff` so every phase boundary is a commit. Next branch: `phase-4-deploy`. |
+| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
 
@@ -639,6 +639,101 @@ one.
   production code, which was right, but in the test written to check it.
 - Worth keeping in mind for CI: a GitHub runner is UTC, which is a *third* zone. The fix
   makes the tests zone-independent rather than merely correct in one place.
+
+### 2026-09-01 — Phase 3: the React SPA, scaffolded in one pass
+
+The whole frontend was written in a single session against the running local API. It builds
+(`tsc -b && vite build`) and lints (`oxlint`) clean, and every read endpoint was curled
+through the Vite proxy to confirm `src/api/types.ts` matches the wire shapes. It has **not**
+been driven in a browser yet — that, and the Google login round trip, are the open Phase 3
+items (`STATE.md`).
+
+- **Toolchain landed newer than §3 anticipated:** Vite **8**, React **19**, TypeScript
+  **6**, from `npm create vite@latest -- --template react-ts`. §3 was written expecting
+  roughly Vite 5 / React 18. No code impact — the patterns (hooks, JSX, the proxy) are
+  unchanged — so §3's table is left as-is rather than chased version by version. `zod` is
+  **v4**, `react-router-dom` **v7**, `@tanstack/react-query` **v5**.
+- **One `fetch` wrapper, `src/api/client.ts`, and nothing else calls the network** (§11).
+  It attaches `credentials: "include"`, sets `X-XSRF-TOKEN` from the `XSRF-TOKEN` cookie on
+  mutating verbs only, parses RFC 7807 bodies into a typed `ApiError` (carrying `detail` and
+  the `errors[]` field list), and on a 401 sends the browser to
+  `/oauth2/authorization/google`.
+- **`useMe()` opts out of the 401 redirect**, every other call keeps it. A signed-out
+  visitor must land on a page with a "Sign in" link, not be bounced to Google before the
+  shell renders; a session that lapses *mid-use* should bounce. One boolean option on the
+  client (`redirectOnUnauthorized`, default true) expresses both.
+- **Mutations invalidate across query families, not just their own.** A stage edit can move
+  `status` / `currentStageType` / `lastContactAt`, which feed stats, follow-ups and
+  upcoming-interviews. Rather than reason about which moved, the applications hooks
+  invalidate all four families (`applications` list, `stats`, `followups`, `interviews`) on
+  every write. They refetch lazily, only if mounted.
+- **Enum arrays are re-declared in `src/lib/enums.ts` in SCHEMA.md §5 order** — `StageType`
+  especially, since the funnel renders in that order. This is a third copy of the list
+  (Java enum, `SCHEMA.md §5`, now TS); the same "keep the three in sync" note applies, now
+  four.
+- **zod schemas are written over the *form's* shape** (every text field a string, `""` =
+  not filled), with an explicit `toRequest()` mapper turning blanks into `null`. Trying to
+  make the schema mirror the DTO directly fights react-hook-form's "" defaults and the
+  optional-vs-null distinction. The mapper is where "" → `null` and comma-strings → arrays
+  happen, in one greppable place per form.
+- **Stages are absent from `ApplicationForm`.** They are managed only through the inline
+  timeline on the detail page (`POST`/`PATCH`/`DELETE .../stages`), matching the backend's
+  "exactly one code path maintains the derived fields" rule. The create form relies on the
+  service seeding `APPLICATION_SUBMITTED`.
+- **Plain CSS, one `theme.css` of custom properties.** No CSS framework, no CSS-in-JS —
+  component styling is a mix of utility classes (`.card`, `.stack`, `.row`, `.badge`) and
+  inline `style={{…}}` for one-offs. Deliberately unsophisticated (§3, §12).
+- **Not built, not in the Phase 3 checklist:** logout (no backend endpoint yet either —
+  `STATE.md`), a toast system (errors render inline), a real mobile layout.
+
+### 2026-09-01 — Phase 3 continued: login round trip, logout, and the shell
+
+Verified Google login end to end in a browser (the Phase 2 acceptance criterion that was
+still owed), fixed what that surfaced, and reshaped the frontend around the owner's
+feedback. Merged to `main` with the UI explicitly a first pass.
+
+- **OAuth success redirect must be absolute, built from `app.base-url`.** `oauth2Login()`
+  had `.defaultSuccessUrl("/", true)`. Root-relative `/`, behind the Vite dev proxy,
+  resolves against the backend (`:8080`) — the browser landed on the bare API, hit
+  `anyRequest().denyAll()`, and got a naked 403 that read as a login failure when login had
+  in fact succeeded. Replaced with a `SimpleUrlAuthenticationSuccessHandler` pointed at
+  `appProperties.getBaseUrl() + "/"` (`http://localhost:5173/` local, the real origin in
+  prod — correct in both), `alwaysUseDefaultTargetUrl(true)` since an SPA has no meaningful
+  "page you were on". Added to `STATE.md`'s trap table.
+- **`accessDeniedHandler` added to the browser chain.** It had only `authenticationEntryPoint`.
+  An authenticated-but-forbidden request therefore fell through to Tomcat's blank 403 page
+  instead of `problem+json`. The bearer chain always wired both; this was an oversight.
+- **Logout: `POST /api/logout` → 204.** Stock Spring Security `logout()` with a
+  `HttpStatusReturningLogoutSuccessHandler(NO_CONTENT)` and `deleteCookies("JSESSIONID")`.
+  Under `/api/` so it rides the existing dev proxy and the SPA's api client (`base = /api`)
+  with no new wiring; the `LogoutFilter` runs ahead of authorization so it needs no
+  `permitAll`. CSRF-protected like any write — the api client already sends `X-XSRF-TOKEN`
+  on mutating verbs. `useLogout()` clears the React Query cache and hard-navigates to `/`.
+- **Logout tests live in their own `LogoutIT`, not in `SecurityIT`.** Adding two
+  `.with(csrf())` methods to `SecurityIT` perturbed the implicit ordering that
+  `csrfCookieIsNotDeferred` depends on ("the first request in the run emits a fresh
+  XSRF-TOKEN cookie") and it began failing with "No cookie". Both are stable apart. Noted
+  in `STATE.md`.
+- **`<App>` is now an auth gate**, not just a router: `useMe()` runs once; while it is in
+  flight a splash shows; if there is no signed-in person a dedicated `Landing` page renders
+  and **the router never mounts** — so a signed-out visitor is not bounced to Google before
+  seeing anything, which is what happened when every dashboard query fired a 401. `useMe()`
+  keeps `redirectOnUnauthorized: false`; every other call still redirects on a mid-session 401.
+- **The shell is a collapsible left sidebar**, replacing the top nav. Brand, icon nav, and
+  a designed profile block (avatar / name / email / Sign out) pinned to the foot. Collapse
+  state is remembered in `localStorage` (`jt:sidebar-collapsed`, try/catch-guarded);
+  collapsed it is a 68px icon rail with hover-label tooltips. Below 860px it is a top strip
+  and the collapse toggle is hidden.
+- **Design direction: "warm editorial".** After the owner rejected both the initial light
+  indigo ("too bright") and a dark-glass pass ("too dark, generic"), the theme settled on a
+  paper-tone ground, **Fraunces** (serif) for headings and the wordmark, Inter for UI,
+  JetBrains Mono for numbers / badges / eyebrow labels, and a single deep pine-green accent
+  with a mint gradient. Hover motion throughout (row tint + inset rule, card lift, nav
+  slide, link underline wipe). The owner has **explicitly deferred further UI work** — this
+  is a functional first pass, not the finished look. `theme.css` is the single source; no
+  framework, ~450 lines.
+- **`index.html`** loads Fraunces + Inter + JetBrains Mono from Google Fonts; new favicon
+  (pine funnel mark). `color-scheme: light`.
 
 ---
 
