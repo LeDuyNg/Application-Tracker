@@ -453,24 +453,24 @@ interviews. Runs on `localhost:5173`, proxying to `localhost:8080`.
 > clever ones.
 
 ### Setup
-- [ ] `npm create vite@latest frontend -- --template react-ts`; `cd frontend; npm install`.
-- [ ] Install: `@tanstack/react-query`, `react-router-dom`, `react-hook-form`, `zod`,
+- [x] `npm create vite@latest frontend -- --template react-ts`; `cd frontend; npm install`.
+- [x] Install: `@tanstack/react-query`, `react-router-dom`, `react-hook-form`, `zod`,
       `@hookform/resolvers`, `date-fns` (date formatting).
-- [ ] `vite.config.ts`: dev `server.proxy` forwarding `/api`, `/oauth2`, `/login` to
+- [x] `vite.config.ts`: dev `server.proxy` forwarding `/api`, `/oauth2`, `/login` to
       `http://localhost:8080` (so the browser treats everything as same-origin and the
       session cookie works).
-- [ ] `tsconfig.json`: `"strict": true`.
-- [ ] Set up `QueryClientProvider` and `BrowserRouter` in `main.tsx`.
+- [x] `tsconfig.json`: `"strict": true`.
+- [x] Set up `QueryClientProvider` and `BrowserRouter` in `main.tsx`.
 - [x] Branch `phase-3-frontend`. Cut from `main` at `75473df`, which carries Phases 1 and 2.
 
 ### API layer (`src/api/`)
-- [ ] `types.ts` — TypeScript interfaces mirroring the backend response DTOs
+- [x] `types.ts` — TypeScript interfaces mirroring the backend response DTOs
       (`ApplicationResponse`, `CompanyResponse`, `Stage`, `StatsResponse`, etc.), plus the
       enum string-literal unions matching `SCHEMA.md §5`.
-- [ ] `apiClient.ts` — a `fetch` wrapper: base `/api`, `credentials: "include"`, sets
+- [x] `apiClient.ts` — a `fetch` wrapper: base `/api`, `credentials: "include"`, sets
       `X-XSRF-TOKEN` from the `XSRF-TOKEN` cookie on mutations, throws a typed `ApiError`
       on non-2xx, and **on 401 triggers a redirect** to `/oauth2/authorization/google`.
-- [ ] `hooks/` — one hook per operation using `useQuery` / `useMutation`:
+- [x] `hooks/` — one hook per operation using `useQuery` / `useMutation`:
       `useApplications(filters)`, `useApplication(id)`, `useCreateApplication()`,
       `useUpdateApplication()`, `useDeleteApplication()`, `useAddStage()`,
       `useUpdateStage()`, `useCompanies()`, `useCreateCompany()`, `useStats(days)`,
@@ -478,37 +478,37 @@ interviews. Runs on `localhost:5173`, proxying to `localhost:8080`.
       relevant queries on success.
 
 ### Routing & shell
-- [ ] Routes: `/` (Dashboard), `/applications` (list), `/applications/new` (form),
+- [x] Routes: `/` (Dashboard), `/applications` (list), `/applications/new` (form),
       `/applications/:id` (detail), `/applications/:id/edit` (form), `/companies` (list),
       `/companies/:id` (detail).
-- [ ] `AppShell` — top nav + `useMe()` showing the logged-in email; a "Sign in" state if
+- [x] `AppShell` — top nav + `useMe()` showing the logged-in email; a "Sign in" state if
       `useMe()` 401s.
 
 ### Components (`src/components/`)
-- [ ] `StatusBadge` (application status → colored pill), `StageStatusBadge`.
-- [ ] `StatCard` (label + number), used in a `StatsBar`.
-- [ ] `StageTimeline` — vertical list of an application's stages with type, date, status,
+- [x] `StatusBadge` (application status → colored pill), `StageStatusBadge`.
+- [x] `StatCard` (label + number), used in a `StatsBar`.
+- [x] `StageTimeline` — vertical list of an application's stages with type, date, status,
       notes; "add stage" and inline edit.
-- [ ] `FiltersBar` — status select, company select, free-text `q`, date range; drives
+- [x] `FiltersBar` — status select, company select, free-text `q`, date range; drives
       `useApplications`.
-- [ ] `ApplicationTable` — rows: company, role, status, current stage, applied date,
+- [x] `ApplicationTable` — rows: company, role, status, current stage, applied date,
       next interview; links to detail.
-- [ ] `FollowupsWidget`, `UpcomingInterviewsWidget` — for the dashboard.
-- [ ] `ApplicationForm` — react-hook-form + zod resolver; zod schema mirrors
+- [x] `FollowupsWidget`, `UpcomingInterviewsWidget` — for the dashboard.
+- [x] `ApplicationForm` — react-hook-form + zod resolver; zod schema mirrors
       `CreateApplicationRequest`; company is a select populated by `useCompanies()` with an
       "add new company" affordance.
-- [ ] `CompanyForm` — name, website, industry, contacts (field array), notes, tags.
+- [x] `CompanyForm` — name, website, industry, contacts (field array), notes, tags.
 
 ### Pages
-- [ ] `Dashboard` — `StatsBar` + `FollowupsWidget` + `UpcomingInterviewsWidget` + a
+- [x] `Dashboard` — `StatsBar` + `FollowupsWidget` + `UpcomingInterviewsWidget` + a
       "recent activity" slice of `useApplications`.
-- [ ] `ApplicationsList` — `FiltersBar` + `ApplicationTable` + pagination.
-- [ ] `ApplicationDetail` — all fields + `StageTimeline` + edit/delete.
-- [ ] `ApplicationForm` page (new/edit).
-- [ ] `CompaniesList` / `CompanyDetail` (detail shows the company's applications).
+- [x] `ApplicationsList` — `FiltersBar` + `ApplicationTable` + pagination.
+- [x] `ApplicationDetail` — all fields + `StageTimeline` + edit/delete.
+- [x] `ApplicationForm` page (new/edit).
+- [x] `CompaniesList` / `CompanyDetail` (detail shows the company's applications).
 
 ### Styling
-- [ ] Plain CSS or CSS Modules. One `theme.css` with a few CSS variables (colors,
+- [x] Plain CSS or CSS Modules. One `theme.css` with a few CSS variables (colors,
       spacing). No component library. Responsive enough to use on a laptop; mobile is a
       stretch goal.
 
@@ -517,6 +517,12 @@ interviews. Runs on `localhost:5173`, proxying to `localhost:8080`.
       `localhost:5173`), then create a company, create an application, add stages, and
       confirm the dashboard widgets and filters reflect it.
 - [ ] `npm run build` succeeds and `npm run preview` serves a working SPA.
+      _(`npm run build` and `npm run lint` are green as of the scaffold; `npm run preview`
+      and the browser click-through are still to do — see `STATE.md`.)_
+- [x] Read plumbing checked by curl through the proxy: `/api/me` → 401 `problem+json` +
+      `XSRF-TOKEN` cookie; stats / applications / followups / interviews / companies return
+      the shapes `src/api/types.ts` expects; `/oauth2/authorization/google` → 302 to Google
+      with `redirect_uri=…:5173/login/oauth2/code/google`.
 
 **Done when:** you can run your real job-search workflow end-to-end in the browser locally
 — add companies and applications, log every interview stage, and the stats / follow-ups /

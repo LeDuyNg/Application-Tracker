@@ -1,0 +1,164 @@
+/* One place for the handful of design tokens the app uses. Plain CSS custom properties
+   (the `--name` things) — no Tailwind, no CSS-in-JS. Read a token anywhere with
+   `var(--space-3)`. Deliberately minimal (CLAUDE.md §3). */
+
+:root {
+  /* neutrals */
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --border: #e3e6ea;
+  --text: #1c2024;
+  --text-muted: #6b7280;
+
+  /* brand / accent */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-weak: #eff4ff;
+
+  /* status colours — used by the badges */
+  --c-green: #15803d;
+  --c-green-bg: #e7f6ec;
+  --c-amber: #b45309;
+  --c-amber-bg: #fdf1e3;
+  --c-red: #b91c1c;
+  --c-red-bg: #fdeaea;
+  --c-blue: #1d4ed8;
+  --c-blue-bg: #eaf0fe;
+  --c-gray: #4b5563;
+  --c-gray-bg: #eef0f2;
+
+  /* spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.1);
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1 { font-size: 1.5rem; margin: 0 0 var(--space-4); }
+h2 { font-size: 1.15rem; margin: 0 0 var(--space-3); }
+h3 { font-size: 1rem; margin: 0 0 var(--space-2); }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+button:hover { background: #f0f2f5; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.primary:hover { background: var(--accent-hover); }
+
+button.danger {
+  background: var(--surface);
+  border-color: var(--c-red);
+  color: var(--c-red);
+}
+button.danger:hover { background: var(--c-red-bg); }
+
+input, select, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent-weak);
+  border-color: var(--accent);
+}
+
+textarea { min-height: 64px; resize: vertical; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td {
+  text-align: left;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-muted); }
+
+/* --- small reusable layout helpers --- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-5);
+}
+
+.stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.row { display: flex; gap: var(--space-3); align-items: center; }
+.row-wrap { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+.grid { display: grid; gap: var(--space-4); }
+
+.muted { color: var(--text-muted); }
+.small { font-size: 0.85rem; }
+.nowrap { white-space: nowrap; }
+.mono { font-family: var(--mono); }
+
+.field { display: flex; flex-direction: column; gap: var(--space-1); }
+.field > label { font-weight: 600; font-size: 0.85rem; }
+.field .error { color: var(--c-red); font-size: 0.8rem; }
+
+.badge {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge.green { color: var(--c-green); background: var(--c-green-bg); }
+.badge.amber { color: var(--c-amber); background: var(--c-amber-bg); }
+.badge.red   { color: var(--c-red);   background: var(--c-red-bg); }
+.badge.blue  { color: var(--c-blue);  background: var(--c-blue-bg); }
+.badge.gray  { color: var(--c-gray);  background: var(--c-gray-bg); }
+
+.error-note {
+  background: var(--c-red-bg);
+  border: 1px solid var(--c-red);
+  color: var(--c-red);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+}

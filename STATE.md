@@ -26,7 +26,11 @@ disagree about *what is built*, check the code.
 
 ## 2. Where the work stands
 
-**Current phase:** Phase 3 — React SPA. **Not started**; the branch exists and is empty.
+**Current phase:** Phase 3 — React SPA. **Scaffolded and building; not yet verified in a
+browser.** The whole SPA is written (setup, API layer, hooks, shell, all seven pages, both
+forms, the stage timeline, plain-CSS theme). `npm run build` and `npm run lint` are green.
+What has **not** happened: nobody has opened it in a browser and clicked through — including
+the Google login round trip (see below).
 **Branch:** `phase-3-frontend`, cut from `main`.
 **`main` is at `75473df`** and contains Phases 1 and 2, merged with `--no-ff` so each phase
 boundary is a commit. `mvn verify` was run on the merge result before pushing — 100 tests
@@ -49,31 +53,47 @@ pointing into merged history. Harmless; delete them whenever.
     allowlist **and** `email_verified`, CSRF cookie with the deferred-token opt-out,
     401/403 as `problem+json` instead of redirects, `GET /api/me`.
 - **100 tests green** (`./mvnw verify`): 26 unit, 74 integration across seven `*IT` classes.
+- **Phase 3 — React SPA (scaffolded, unverified in browser).** `frontend/` on Vite 8 /
+  React 19 / TS 6. `vite.config.ts` proxies `/api`, `/oauth2`, `/login` → `:8080`.
+  `src/api/` = `types.ts` (DTO mirrors), `client.ts` (the one `fetch` wrapper: session
+  cookie, `X-XSRF-TOKEN` on mutations, `ApiError`, 401→`/oauth2/authorization/google`),
+  and one TanStack Query hook per operation with cross-family invalidation after writes.
+  Seven pages (dashboard, applications list/detail/form, companies list/detail/form), both
+  entity forms on react-hook-form + zod, an inline stage add/edit timeline, plain-CSS
+  `theme.css`. `npm run build` + `npm run lint` green. Plumbing checked with curl through
+  the proxy: `/api/me`→401 `problem+json` + `XSRF-TOKEN` cookie; the four read endpoints
+  return the exact shapes `types.ts` expects; `/oauth2/authorization/google`→302 to Google
+  with `redirect_uri=http://localhost:5173/login/oauth2/code/google`.
 
 ### The one thing still unverified
-**A real Google login round trip.** The `local` redirect URI points at
-`http://localhost:5173` — the Vite dev server — which does not exist until Phase 3. So
-signing in cannot currently complete, and the `.http` collection's **write** requests, which
-need a real `JSESSIONID`, cannot run. Every `GET` works today via the MCP bearer token.
+**A real Google login round trip, end to end in a browser.** The plumbing is now all in
+place — the Vite dev server exists on `:5173`, `/login` and `/oauth2` are proxied, the
+`local` redirect URI points at `:5173`, `defaultSuccessUrl("/")` lands back on the SPA, and
+the 302 to Google carries the right `redirect_uri`. What is left is purely manual: run
+`docker start jt-mongo`, the backend on the `local` profile, `npm run dev` in `frontend/`,
+open `http://localhost:5173`, click **Sign in**, and confirm the top-right shows the
+signed-in email (i.e. `/api/me` returns the profile). One prerequisite outside the code:
+`http://localhost:5173/login/oauth2/code/google` must be registered as an authorized
+redirect URI on the Google OAuth client — check this in the Cloud Console if login bounces.
+Until this is done, the `.http` collection's **write** requests still cannot run (they need
+a real `JSESSIONID`). Every `GET` works via the MCP bearer token.
 
-**Phase 3 fixes this as a side effect**: once `npm run dev` is serving `:5173` with the
-`/login` and `/oauth2` proxy entries in `vite.config.ts`, the redirect lands somewhere real.
-Treat "log in with Google and see `/api/me` return the profile" as the first thing to check
-once the dev server runs, not as a Phase 3 finishing touch — it is a Phase 2 acceptance
-criterion still owed.
+### What's left in Phase 3
+The build is done; what remains is verification and polish, in order:
 
-### What Phase 3 is
-`PLAN.md` Phase 3 has the full checklist. The shape: Vite + React + TS on `:5173` proxying
-`/api`, `/oauth2` and `/login` to `:8080`; TanStack Query for every server call; react-hook-form
-+ zod for the two forms; plain CSS. `CLAUDE.md §12` asks for a slower pace here and an
-explanation of each new concept the first time it appears — React, TS and the whole frontend
-toolchain are new ground for the owner.
+1. **The browser login round trip** (above) — the one Phase 2 acceptance criterion still owed.
+2. **Actually use it.** Create a company, create an application, add stages, and confirm the
+   dashboard widgets, filters and funnel reflect the changes. `PLAN.md` Phase 3's "Done
+   when" is the real bar: run your actual job-search workflow end to end locally.
+3. **`npm run preview`** serves a working build (the `build` step itself is already green).
+4. **Not built, and not blocking:** no logout button (still no backend logout endpoint —
+   see below), no toast/notification system (mutation errors render inline via `ErrorNote`),
+   no responsive/mobile pass beyond flex-wrap. None are in `PLAN.md` Phase 3.
 
-The one trap already written down: **the Vite proxy is only two-thirds of what makes OAuth
-work locally.** Cookies ignore ports, so a session set by `:8080` is sent from `:5173` — but
-if the registered redirect URI points at `:8080`, Google sends the *browser* there after
-login and you land on a bare API instead of the SPA. All three parts are in `PLAN.md`
-Phase 3's gotchas.
+The OAuth trap is handled: the Vite proxy forwards `/login`, the `local` redirect URI points
+at `:5173`, and `defaultSuccessUrl("/")` lands back on the SPA. The remaining risk is the
+Google Cloud Console registration of the `:5173` callback URL — verified in the code, not
+yet against Google.
 
 ### Phase 0 — one item left
 **Datadog student-pack redemption**, and the **APM-trial-availability check** inside it. That
@@ -83,8 +103,10 @@ trial is offerable means the APM screenshots have to be re-planned with the cloc
 spent.
 
 ### Gaps noticed, deliberately not built
-- **No logout endpoint.** Neither Phase 2 nor Phase 3 lists one in `PLAN.md`, but a login
-  system without one is odd. Worth adding when the SPA needs it — likely early in Phase 3.
+- **No logout endpoint / button.** Neither Phase 2 nor Phase 3 lists one in `PLAN.md`. The
+  SPA shell shows the signed-in email but no way to sign out. Still worth adding — a
+  `POST /logout` (Spring Security provides one; it needs the CSRF token) plus a button in
+  `AppShell`. Left out of the Phase 3 scaffold to stay on the checklist.
 
 ---
 
@@ -97,6 +119,7 @@ spent.
 | MongoDB | Docker container `jt-mongo`, **mongo:8.3.8**, on `localhost:27017`. `docker start jt-mongo` after a reboot — `docker run` only ever needs to happen once. |
 | IntelliJ | Project opened at the **repo root**, `backend/` imported as a Maven module. Run config **JobTracker (local)** is committed at `.idea/runConfigurations/`. |
 | Docker | Required for Testcontainers (`./mvnw verify`). |
+| Node | **v25.2.1 / npm 11.13.0.** `frontend/` scaffolded with Vite 8, React 19, TypeScript 6 (newer than the `react-ts` template CLAUDE.md §3 anticipated — no code impact). `node_modules/` is gitignored; run `npm install` in `frontend/` on a fresh clone. |
 
 ### Commands
 
@@ -106,7 +129,16 @@ cd backend
 ./mvnw verify    # + *IT (Failsafe)      — needs Docker
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 # app: http://localhost:8080 · swagger: /swagger-ui.html · health: /actuator/health
+
+cd frontend
+npm install
+npm run dev      # http://localhost:5173 — proxies /api, /oauth2, /login → :8080
+npm run build    # tsc -b && vite build  (this is the type-check too)
+npm run lint     # oxlint
+npm run preview  # serve the built dist/
 ```
+
+Full local stack: `docker start jt-mongo`, then the backend on `local`, then `npm run dev`.
 
 IntelliJ's green arrow runs `*Test` **and** `*IT` alike, ignoring the Surefire/Failsafe
 split. Only `./mvnw verify` reproduces CI.

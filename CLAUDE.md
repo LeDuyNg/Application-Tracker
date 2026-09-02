@@ -56,14 +56,14 @@ survive a follow-up question.)*
 
 | | |
 |---|---|
-| **Current phase** | **Phase 3 — React SPA. Not started.** Phases 1 and 2 are merged to `main` (`75473df`), 100 tests green. Still owed from Phase 2: a real Google login round trip, which needs the Vite dev server on `:5173`. |
+| **Current phase** | **Phase 3 — React SPA. Scaffolded; builds and lints clean; not yet driven in a browser.** Whole SPA written on `phase-3-frontend` (Vite 8 / React 19 / TS 6). Phases 1 and 2 are merged to `main` (`75473df`), 100 tests green. Still owed from Phase 2 and now unblocked: a real Google login round trip through the SPA — plumbing verified by curl, not yet by a human. |
 | **Phase 0 status** | Domain, Oracle VM, Atlas M0 and the Google OAuth client are all done. **Outstanding: Datadog student-pack redemption**, including the APM-trial-availability check — the one item with no recovery path if found late. |
 | **Session handoff** | See **`STATE.md`** — current branch, what is built, what is next, machine setup, and the Boot 4 traps already found |
 | **Plan** | See `PLAN.md` for the full phased checklist |
 | **Schema** | See `SCHEMA.md` for the full data model |
 | **Live URL** | _not deployed yet_ (`https://app4jobtrack.me` once Phase 4 is done) |
 | **Repo** | `https://github.com/LeDuyNg/Application-Tracker` — `main` carries Phases 1 and 2, merged `--no-ff` so each phase boundary is a commit. Work continues on `phase-3-frontend`. |
-| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config. |
+| **Local dev** | `docker start jt-mongo` (MongoDB 8.3.8 on `:27017`), then the **JobTracker (local)** run config, then `cd frontend && npm run dev` (`:5173`). |
 | **IDE** | **IntelliJ IDEA** — Spring Initializr, HTTP Client, Docker, and Database tool windows are all used; see §9. |
 | **Datadog plan** | **Pro via the GitHub Student Developer Pack** (10 hosts, ~13-month retention, free for 2 years). APM is *not* included — see §6. |
 
@@ -639,6 +639,52 @@ one.
   production code, which was right, but in the test written to check it.
 - Worth keeping in mind for CI: a GitHub runner is UTC, which is a *third* zone. The fix
   makes the tests zone-independent rather than merely correct in one place.
+
+### 2026-09-01 — Phase 3: the React SPA, scaffolded in one pass
+
+The whole frontend was written in a single session against the running local API. It builds
+(`tsc -b && vite build`) and lints (`oxlint`) clean, and every read endpoint was curled
+through the Vite proxy to confirm `src/api/types.ts` matches the wire shapes. It has **not**
+been driven in a browser yet — that, and the Google login round trip, are the open Phase 3
+items (`STATE.md`).
+
+- **Toolchain landed newer than §3 anticipated:** Vite **8**, React **19**, TypeScript
+  **6**, from `npm create vite@latest -- --template react-ts`. §3 was written expecting
+  roughly Vite 5 / React 18. No code impact — the patterns (hooks, JSX, the proxy) are
+  unchanged — so §3's table is left as-is rather than chased version by version. `zod` is
+  **v4**, `react-router-dom` **v7**, `@tanstack/react-query` **v5**.
+- **One `fetch` wrapper, `src/api/client.ts`, and nothing else calls the network** (§11).
+  It attaches `credentials: "include"`, sets `X-XSRF-TOKEN` from the `XSRF-TOKEN` cookie on
+  mutating verbs only, parses RFC 7807 bodies into a typed `ApiError` (carrying `detail` and
+  the `errors[]` field list), and on a 401 sends the browser to
+  `/oauth2/authorization/google`.
+- **`useMe()` opts out of the 401 redirect**, every other call keeps it. A signed-out
+  visitor must land on a page with a "Sign in" link, not be bounced to Google before the
+  shell renders; a session that lapses *mid-use* should bounce. One boolean option on the
+  client (`redirectOnUnauthorized`, default true) expresses both.
+- **Mutations invalidate across query families, not just their own.** A stage edit can move
+  `status` / `currentStageType` / `lastContactAt`, which feed stats, follow-ups and
+  upcoming-interviews. Rather than reason about which moved, the applications hooks
+  invalidate all four families (`applications` list, `stats`, `followups`, `interviews`) on
+  every write. They refetch lazily, only if mounted.
+- **Enum arrays are re-declared in `src/lib/enums.ts` in SCHEMA.md §5 order** — `StageType`
+  especially, since the funnel renders in that order. This is a third copy of the list
+  (Java enum, `SCHEMA.md §5`, now TS); the same "keep the three in sync" note applies, now
+  four.
+- **zod schemas are written over the *form's* shape** (every text field a string, `""` =
+  not filled), with an explicit `toRequest()` mapper turning blanks into `null`. Trying to
+  make the schema mirror the DTO directly fights react-hook-form's "" defaults and the
+  optional-vs-null distinction. The mapper is where "" → `null` and comma-strings → arrays
+  happen, in one greppable place per form.
+- **Stages are absent from `ApplicationForm`.** They are managed only through the inline
+  timeline on the detail page (`POST`/`PATCH`/`DELETE .../stages`), matching the backend's
+  "exactly one code path maintains the derived fields" rule. The create form relies on the
+  service seeding `APPLICATION_SUBMITTED`.
+- **Plain CSS, one `theme.css` of custom properties.** No CSS framework, no CSS-in-JS —
+  component styling is a mix of utility classes (`.card`, `.stack`, `.row`, `.badge`) and
+  inline `style={{…}}` for one-offs. Deliberately unsophisticated (§3, §12).
+- **Not built, not in the Phase 3 checklist:** logout (no backend endpoint yet either —
+  `STATE.md`), a toast system (errors render inline), a real mobile layout.
 
 ---
 
