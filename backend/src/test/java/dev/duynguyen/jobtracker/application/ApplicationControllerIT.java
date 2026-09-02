@@ -1,6 +1,7 @@
 package dev.duynguyen.jobtracker.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -21,12 +22,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.jayway.jsonpath.JsonPath;
 
+import dev.duynguyen.jobtracker.common.TimeService;
 import dev.duynguyen.jobtracker.support.AbstractMongoIT;
 
 /**
@@ -42,10 +45,29 @@ import dev.duynguyen.jobtracker.support.AbstractMongoIT;
  * are therefore relative to {@code now()} rather than hardcoded.
  */
 @AutoConfigureMockMvc
+// Phase 2 gates every /api/** route behind a session. These tests are about the
+// endpoints, not the login, so they run as an already-authenticated user; SecurityIT
+// is where the gate itself is tested.
+@WithMockUser
 class ApplicationControllerIT extends AbstractMongoIT {
 
     @Autowired private MockMvc mvc;
     @Autowired private MongoTemplate mongo;
+    @Autowired private TimeService time;
+
+    /**
+     * Today <strong>in {@code app.timezone}</strong>, not in the JVM's default zone.
+     *
+     * <p>These are not interchangeable and the difference is invisible for most of the
+     * day. This suite ran green for hours using {@code LocalDate.now()} and started
+     * failing at 21:00 Pacific — the moment it became tomorrow in New York — with
+     * {@code daysOverdue} off by exactly one. The app computes every relative date
+     * boundary in the owner's timezone (SCHEMA.md §7); a test asserting on those
+     * boundaries has to use the same clock or it is testing the laptop's location.
+     */
+    private LocalDate today() {
+        return time.today();
+    }
 
     private String companyId;
 
@@ -59,7 +81,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
     // ------------------------------------------------------------ fixtures
 
     private String createCompany(String name) throws Exception {
-        String body = mvc.perform(post("/api/companies")
+        String body = mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "%s" }""".formatted(name)))
@@ -70,7 +92,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
 
     /** An application with only the required fields — the service seeds its first stage. */
     private String createApplication(String role) throws Exception {
-        String body = mvc.perform(post("/api/applications")
+        String body = mvc.perform(post("/api/applications").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -78,7 +100,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                   "role": "%s",
                                   "appliedDate": "%s",
                                   "source": "REFERRAL"
-                                }""".formatted(companyId, role, LocalDate.now().minusDays(10))))
+                                }""".formatted(companyId, role, today().minusDays(10))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.id");
@@ -93,7 +115,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @Test
         @DisplayName("201 with a Location header, ACTIVE by default, and a seeded submission stage")
         void createsWithDefaults() throws Exception {
-            mvc.perform(post("/api/applications")
+            mvc.perform(post("/api/applications").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -101,7 +123,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                       "role": "Backend Engineer",
                                       "appliedDate": "%s",
                                       "source": "REFERRAL"
-                                    }""".formatted(companyId, LocalDate.now().minusDays(3))))
+                                    }""".formatted(companyId, today().minusDays(3))))
                     .andExpect(status().isCreated())
                     .andExpect(header().string("Location", org.hamcrest.Matchers.startsWith("/api/applications/")))
                     .andExpect(jsonPath("$.status").value("ACTIVE"))
@@ -116,7 +138,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @Test
         @DisplayName("400 naming every invalid field, not just the first")
         void reportsAllValidationErrors() throws Exception {
-            mvc.perform(post("/api/applications")
+            mvc.perform(post("/api/applications").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     { "companyId": "", "role": "" }"""))
@@ -130,7 +152,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @Test
         @DisplayName("400 when companyId does not exist")
         void rejectsUnknownCompany() throws Exception {
-            mvc.perform(post("/api/applications")
+            mvc.perform(post("/api/applications").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -138,7 +160,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                       "role": "Backend Engineer",
                                       "appliedDate": "%s",
                                       "source": "REFERRAL"
-                                    }""".formatted(LocalDate.now().minusDays(1))))
+                                    }""".formatted(today().minusDays(1))))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("does not exist")));
         }
@@ -146,7 +168,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @Test
         @DisplayName("400 listing the legal values when an enum constant is unknown")
         void rejectsUnknownEnumValue() throws Exception {
-            mvc.perform(post("/api/applications")
+            mvc.perform(post("/api/applications").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -154,7 +176,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                       "role": "Backend Engineer",
                                       "appliedDate": "%s",
                                       "source": "CARRIER_PIGEON"
-                                    }""".formatted(companyId, LocalDate.now().minusDays(1))))
+                                    }""".formatted(companyId, today().minusDays(1))))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.title").value("Malformed Request"))
                     // The passed-through Jackson message names every accepted constant,
@@ -165,7 +187,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @Test
         @DisplayName("400 when appliedDate is in the future")
         void rejectsFutureAppliedDate() throws Exception {
-            mvc.perform(post("/api/applications")
+            mvc.perform(post("/api/applications").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -173,7 +195,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                       "role": "Backend Engineer",
                                       "appliedDate": "%s",
                                       "source": "REFERRAL"
-                                    }""".formatted(companyId, LocalDate.now().plusDays(30))))
+                                    }""".formatted(companyId, today().plusDays(30))))
                     .andExpect(status().isBadRequest());
         }
     }
@@ -198,7 +220,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
     void update() throws Exception {
         String id = createApplication("Backend Engineer");
 
-        mvc.perform(put("/api/applications/{id}", id)
+        mvc.perform(put("/api/applications/{id}", id).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -208,7 +230,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                                   "appliedDate": "%s",
                                   "source": "COLD_APPLY",
                                   "notes": "Pulled out — took another offer."
-                                }""".formatted(companyId, LocalDate.now().minusDays(10))))
+                                }""".formatted(companyId, today().minusDays(10))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("Backend Engineer, Payments"))
                 .andExpect(jsonPath("$.status").value("WITHDRAWN"))
@@ -220,7 +242,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
     void deleteApplication() throws Exception {
         String id = createApplication("Backend Engineer");
 
-        mvc.perform(delete("/api/applications/{id}", id)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/applications/{id}", id).with(csrf())).andExpect(status().isNoContent());
         mvc.perform(get("/api/applications/{id}", id)).andExpect(status().isNotFound());
     }
 
@@ -235,7 +257,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         void addStage() throws Exception {
             String id = createApplication("Backend Engineer");
 
-            String body = mvc.perform(post("/api/applications/{id}/stages", id)
+            String body = mvc.perform(post("/api/applications/{id}/stages", id).with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -261,7 +283,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         void rejectsScheduledWithoutDate() throws Exception {
             String id = createApplication("Backend Engineer");
 
-            mvc.perform(post("/api/applications/{id}/stages", id)
+            mvc.perform(post("/api/applications/{id}/stages", id).with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     { "type": "TECHNICAL_INTERVIEW", "status": "SCHEDULED" }"""))
@@ -278,7 +300,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                     .andReturn().getResponse().getContentAsString();
             String stageId = JsonPath.read(body, "$.stages[0].stageId");
 
-            mvc.perform(patch("/api/applications/{id}/stages/{stageId}", id, stageId)
+            mvc.perform(patch("/api/applications/{id}/stages/{stageId}", id, stageId).with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {
@@ -290,7 +312,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.stages[0].notes").value("Applied through the referral portal"));
 
-            mvc.perform(patch("/api/applications/{id}/stages/{stageId}", id, "no-such-stage")
+            mvc.perform(patch("/api/applications/{id}/stages/{stageId}", id, "no-such-stage").with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     { "type": "OFFER", "status": "EXPECTED" }"""))
@@ -301,7 +323,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
         @DisplayName("DELETE removes a round, but refuses to remove the last one")
         void deleteStage() throws Exception {
             String id = createApplication("Backend Engineer");
-            mvc.perform(post("/api/applications/{id}/stages", id)
+            mvc.perform(post("/api/applications/{id}/stages", id).with(csrf())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     { "type": "RECRUITER_SCREEN", "status": "EXPECTED" }"""))
@@ -312,13 +334,13 @@ class ApplicationControllerIT extends AbstractMongoIT {
             String second = JsonPath.read(body, "$.stages[1].stageId");
             String first = JsonPath.read(body, "$.stages[0].stageId");
 
-            mvc.perform(delete("/api/applications/{id}/stages/{stageId}", id, second))
+            mvc.perform(delete("/api/applications/{id}/stages/{stageId}", id, second).with(csrf()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.stages.length()").value(1));
 
             // An application with no stages could never appear in the funnel or the
             // response-rate denominator, so the service refuses rather than allowing it.
-            mvc.perform(delete("/api/applications/{id}/stages/{stageId}", id, first))
+            mvc.perform(delete("/api/applications/{id}/stages/{stageId}", id, first).with(csrf()))
                     .andExpect(status().isBadRequest());
         }
     }
@@ -357,7 +379,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
     @DisplayName("followups returns both groups with their thresholds")
     void followups() throws Exception {
         String id = createApplication("Backend Engineer");
-        mvc.perform(put("/api/applications/{id}", id)
+        mvc.perform(put("/api/applications/{id}", id).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {
@@ -367,7 +389,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
                           "appliedDate": "%s",
                           "source": "REFERRAL",
                           "followUpDate": "%s"
-                        }""".formatted(companyId, LocalDate.now().minusDays(10), LocalDate.now())));
+                        }""".formatted(companyId, today().minusDays(10), today())));
 
         mvc.perform(get("/api/applications/followups"))
                 .andExpect(status().isOk())
@@ -382,7 +404,7 @@ class ApplicationControllerIT extends AbstractMongoIT {
     @DisplayName("interviews defaults to a week and rejects a non-positive window")
     void upcomingInterviews() throws Exception {
         String id = createApplication("Backend Engineer");
-        mvc.perform(post("/api/applications/{id}/stages", id)
+        mvc.perform(post("/api/applications/{id}/stages", id).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {

@@ -344,13 +344,13 @@ server; only one email may log in. One Spring Security filter chain.
 **Prerequisites:** Phase 1; Google client ID/secret (Phase 0).
 
 ### Config
-- [ ] Add `spring-boot-starter-oauth2-client` (and `spring-boot-starter-security` if not
+- [x] Add `spring-boot-starter-oauth2-client` (and `spring-boot-starter-security` if not
       transitively present).
-- [ ] `application-*.yml`: `spring.security.oauth2.client.registration.google` with
+- [x] `application-*.yml`: `spring.security.oauth2.client.registration.google` with
       `client-id` / `client-secret` from env (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`);
       `spring.security.oauth2.client.provider.google` defaults are built in.
-- [ ] Env: `APP_ALLOWED_EMAILS` (comma-separated, one entry), `APP_MCP_TOKEN` (long random).
-- [ ] Set `registration.google.redirect-uri` explicitly per profile:
+- [x] Env: `APP_ALLOWED_EMAILS` (comma-separated, one entry), `APP_MCP_TOKEN` (long random).
+- [x] Set `registration.google.redirect-uri` explicitly per profile:
       `http://localhost:5173/login/oauth2/code/google` on `local` (**note the port — 5173,
       the Vite dev server, not 8080**; see Phase 3) and
       `${APP_BASE_URL}/login/oauth2/code/google` on `prod`. Register both in the Google
@@ -362,7 +362,7 @@ server; only one email may log in. One Spring Security filter chain.
 `securityMatcher` makes the MCP token's read-only rule a single line and removes the filter
 ordering hazard entirely.
 
-- [ ] **Chain 1 — bearer / MCP**, `@Order(1)`, `securityMatcher` = requests carrying an
+- [x] **Chain 1 — bearer / MCP**, `@Order(1)`, `securityMatcher` = requests carrying an
       `Authorization: Bearer` header:
   - `sessionManagement(STATELESS)`, `csrf.disable()` (no cookies, no CSRF surface).
   - `BearerTokenFilter` (a `OncePerRequestFilter`): if the token matches `APP_MCP_TOKEN`,
@@ -370,7 +370,7 @@ ordering hazard entirely.
     (→ 401). Compare with **`MessageDigest.isEqual`**, not `String.equals` — constant time.
   - `authorizeHttpRequests`: `GET /api/**` requires `ROLE_MCP`; **everything else is
     denied**. That one line is the entire read-only guarantee — no `@PreAuthorize` needed.
-- [ ] **Chain 2 — browser / OAuth2**, `@Order(2)`, everything else:
+- [x] **Chain 2 — browser / OAuth2**, `@Order(2)`, everything else:
   - `authorizeHttpRequests`: permit `/login/**`, `/oauth2/**`, `/actuator/health`;
     everything under `/api/**` requires auth; deny the rest. **Swagger is *not* permitted
     here** — it is disabled outright in prod via `springdoc.api-docs.enabled=false`
@@ -392,11 +392,11 @@ ordering hazard entirely.
     like a bug in your code. Setting it to `null` opts out of the deferred loading.
     The SPA echoes the `XSRF-TOKEN` cookie as the `X-XSRF-TOKEN` header. Session cookie
     `SameSite=Lax`, `Secure` in prod.
-- [ ] `MeController`: `GET /api/me` → `{ email, name, picture }` from the OAuth principal,
+- [x] `MeController`: `GET /api/me` → `{ email, name, picture }` from the OAuth principal,
       so the SPA can show who's logged in and detect session validity.
 
 ### Tests
-- [ ] `SecurityIT` (Testcontainers + `MockMvc` / `WebTestClient`):
+- [x] `SecurityIT` (Testcontainers + `MockMvc` / `WebTestClient`):
   - unauthenticated `GET /api/applications` → 401 (JSON, not redirect)
   - bearer token valid → `GET` 200; bearer token on `POST` → 403; also on `PUT`, `PATCH`
     and `DELETE`, including the stage sub-resources
@@ -405,13 +405,22 @@ ordering hazard entirely.
     deferred-token regression above)
   - (OAuth login flow itself is hard to fully integration-test; at minimum unit-test the
     email-allowlist `OidcUserService` — allowed email passes, other email throws.)
-- [ ] Existing Phase 1 ITs updated to authenticate (helper that injects a mock OAuth2
+- [x] Existing Phase 1 ITs updated to authenticate (helper that injects a mock OAuth2
       user, or uses the bearer token for GETs).
 
 **Done when:** hitting `/api/**` without auth returns 401 JSON; logging in via Google with
 the allowlisted account works and `GET /api/me` returns your profile; a non-allowlisted
 Google account is rejected; the MCP bearer token can read but not write; `mvn verify`
 green.
+
+*Status: everything here is done and verified against the running app **except the live
+Google round trip**, which cannot be completed yet — the `local` redirect URI points at
+`http://localhost:5173`, the Vite dev server, which does not exist until Phase 3. The
+allowlist logic itself is unit-tested (allowed / other / unverified / missing claim / empty
+list). To try a real login before Phase 3, register
+`http://localhost:8080/login/oauth2/code/google` in the Google client and override
+`spring.security.oauth2.client.registration.google.redirect-uri` to match in
+`backend/config/application-local.yml`.*
 
 **Gotchas:**
 - The OAuth redirect URI registered in Google must **exactly** match

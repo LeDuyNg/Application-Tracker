@@ -14,6 +14,17 @@ spring:
         # defaults to ISO-8601; this is set explicitly so the intent is on the record.
         write-dates-as-timestamps: false
 
+server:
+  servlet:
+    session:
+      cookie:
+        # Lax already blocks the cross-site POSTs CSRF relies on; CSRF protection stays on
+        # regardless, because "the browser probably stops it" is not the same as stopping it.
+        # `secure` is switched on in application-prod.yml — it cannot be set here, or the
+        # cookie would be dropped over plain http on localhost and local login would break.
+        same-site: lax
+        http-only: true
+
 management:
   datadog:
     metrics:

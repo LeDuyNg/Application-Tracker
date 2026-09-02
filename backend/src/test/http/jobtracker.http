@@ -4,6 +4,28 @@
 # global variable that later requests use. Pick the environment (local / prod) from the
 # dropdown at the top right. See README.md in this directory.
 #
+# ---------------------------------------------------------------------------
+# AUTHENTICATION (Phase 2). Two credentials, because there are two kinds of caller.
+#
+#   {{token}}   The MCP server's bearer token — `app.mcp-token` from
+#               backend/config/application-local.yml. Works on GET only, by design: the
+#               bearer chain permits GET and denies everything else, which is the whole
+#               read-only guarantee (CLAUDE.md §6). Every GET below uses it, so the read
+#               half of this file runs with no browser involved.
+#
+#   {{session}} + {{xsrf}}   A browser session, needed for every write. Get them once:
+#               1. Open http://localhost:8080/oauth2/authorization/google and sign in with
+#                  the allowlisted account.
+#               2. In devtools → Application → Cookies → localhost, copy JSESSIONID and
+#                  XSRF-TOKEN.
+#               XSRF-TOKEN is echoed back as the X-XSRF-TOKEN header — that is what CSRF
+#               protection checks. A 403 on a write is almost always this, not authorization.
+#
+# All three live in `http-client.private.env.json`, which is gitignored. The committed
+# `http-client.env.json` has only the base URLs. Create the private file next to it:
+#
+#   { "local": { "token": "...", "session": "...", "xsrf": "..." } }
+#
 # The error cases at the bottom are not filler — Phase 5 re-runs this file against an
 # instrumented local run, and without them the captured traces contain no error spans.
 
@@ -24,6 +46,8 @@ GET {{host}}/actuator/health
 
 ### Create a company
 POST {{host}}/api/companies
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -56,6 +80,8 @@ Content-Type: application/json
 
 ### Create a second company, to have something to group by
 POST {{host}}/api/companies
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 { "name": "Datadog", "industry": "Observability" }
@@ -64,9 +90,11 @@ Content-Type: application/json
 
 ### List companies — alphabetical
 GET {{host}}/api/companies
+Authorization: Bearer {{token}}
 
 ### Fetch one company
 GET {{host}}/api/companies/{{companyId}}
+Authorization: Bearer {{token}}
 
 
 ############################################################
@@ -77,6 +105,8 @@ GET {{host}}/api/companies/{{companyId}}
 # No status and no stages: the service defaults status to ACTIVE and seeds an
 # APPLICATION_SUBMITTED stage. This is the normal path.
 POST {{host}}/api/applications
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -108,6 +138,8 @@ Content-Type: application/json
 ### Create an application with its stages supplied — the Phase 4 backfill shape
 # Historical data: rounds that already happened. This is why scheduledAt is not @Future.
 POST {{host}}/api/applications
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -145,6 +177,8 @@ Content-Type: application/json
 
 ### Create an application at the other company, for grouping
 POST {{host}}/api/applications
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -157,6 +191,7 @@ Content-Type: application/json
 
 ### Fetch one application, with its stages
 GET {{host}}/api/applications/{{applicationId}}
+Authorization: Bearer {{token}}
 
 
 ############################################################
@@ -170,6 +205,8 @@ GET {{host}}/api/applications/{{applicationId}}
     request.variables.set("inThreeDays", new Date(Date.now() + 3 * 86400000).toISOString());
 %}
 POST {{host}}/api/applications/{{applicationId}}/stages
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -192,6 +229,8 @@ Content-Type: application/json
 
 ### Add a round that is expected but not yet booked
 POST {{host}}/api/applications/{{applicationId}}/stages
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 { "type": "SUPERDAY", "status": "EXPECTED" }
@@ -207,6 +246,8 @@ Content-Type: application/json
 
 ### Update a round — full replacement of its fields, not a merge
 PATCH {{host}}/api/applications/{{applicationId}}/stages/{{stageId}}
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -225,6 +266,7 @@ Content-Type: application/json
 
 ### Stats — all time
 GET {{host}}/api/stats
+Authorization: Bearer {{token}}
 
 > {%
     client.test("window is described, not just applied", function () {
@@ -235,15 +277,18 @@ GET {{host}}/api/stats
 
 ### Stats — rolling window
 GET {{host}}/api/stats?days=30
+Authorization: Bearer {{token}}
 
 ### Stats — calendar month
 # "How many applications this month?" means a calendar month, which days=30 cannot express.
 GET {{host}}/api/stats?from=2026-08-01&to=2026-08-31
+Authorization: Bearer {{token}}
 
 ### Search — partial word
 # "strip" is not a token and does not stem to "stripe": a $text index would return nothing
 # here. This is why search is a regex (SCHEMA.md §6).
 GET {{host}}/api/applications?q=strip
+Authorization: Bearer {{token}}
 
 > {%
     client.test("partial words match", function () {
@@ -254,16 +299,19 @@ GET {{host}}/api/applications?q=strip
 
 ### Search — matches notes as well as company and role
 GET {{host}}/api/applications?q=ledger
+Authorization: Bearer {{token}}
 
 ### Search — regex metacharacters are literal text, not a pattern
 # Unescaped, this would be an unbalanced group and a 500. It should be a 200 that finds the
 # Datadog role, whose notes contain "C++ (senior)".
 GET {{host}}/api/applications?q=(senior)
+Authorization: Bearer {{token}}
 
 ### Search — a wildcard matches nothing rather than everything
 # Unescaped, ".*" would match every document. This is the quieter half of the escaping bug:
 # a wrong answer with no error attached.
 GET {{host}}/api/applications?q=.*
+Authorization: Bearer {{token}}
 
 > {%
     client.test("patterns are literal", function () {
@@ -274,9 +322,11 @@ GET {{host}}/api/applications?q=.*
 
 ### Search — filters and paging
 GET {{host}}/api/applications?status=ACTIVE&page=0&size=10&sort=appliedDate,desc
+Authorization: Bearer {{token}}
 
 ### Follow-ups — both groups
 GET {{host}}/api/applications/followups
+Authorization: Bearer {{token}}
 
 > {%
     client.test("both groups and their thresholds are returned", function () {
@@ -288,6 +338,7 @@ GET {{host}}/api/applications/followups
 
 ### Upcoming interviews — default window of 7 days
 GET {{host}}/api/applications/interviews
+Authorization: Bearer {{token}}
 
 > {%
     client.test("the interview added above is here", function () {
@@ -297,6 +348,7 @@ GET {{host}}/api/applications/interviews
 
 ### Upcoming interviews — explicit window
 GET {{host}}/api/applications/interviews?days=30
+Authorization: Bearer {{token}}
 
 
 ############################################################
@@ -305,6 +357,7 @@ GET {{host}}/api/applications/interviews?days=30
 
 ### 404 — unknown application
 GET {{host}}/api/applications/000000000000000000000000
+Authorization: Bearer {{token}}
 
 > {%
     client.test("404 as RFC 7807 problem+json", function () {
@@ -315,6 +368,8 @@ GET {{host}}/api/applications/000000000000000000000000
 
 ### 400 — validation, reporting every bad field at once
 POST {{host}}/api/applications
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 { "companyId": "", "role": "" }
@@ -329,6 +384,8 @@ Content-Type: application/json
 
 ### 400 — unknown enum constant, answered with the legal values
 POST {{host}}/api/applications
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 {
@@ -340,21 +397,28 @@ Content-Type: application/json
 
 ### 400 — a query parameter that will not convert
 GET {{host}}/api/applications?status=NOT_A_STATUS
+Authorization: Bearer {{token}}
 
 ### 400 — a non-positive interview window
 GET {{host}}/api/applications/interviews?days=0
+Authorization: Bearer {{token}}
 
 ### 400 — days and from/to are mutually exclusive
 GET {{host}}/api/stats?days=30&from=2026-08-01
+Authorization: Bearer {{token}}
 
 ### 400 — SCHEDULED without a scheduledAt
 POST {{host}}/api/applications/{{applicationId}}/stages
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 { "type": "HIRING_MANAGER", "status": "SCHEDULED" }
 
 ### 409 — duplicate company name, whatever the casing
 POST {{host}}/api/companies
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 Content-Type: application/json
 
 { "name": "stripe" }
@@ -363,6 +427,8 @@ Content-Type: application/json
 # Cascading would silently destroy interview history, so the service refuses and says how
 # many are in the way (CLAUDE.md §6).
 DELETE {{host}}/api/companies/{{companyId}}
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 
 > {%
     client.test("delete is blocked, and the error is actionable", function () {
@@ -374,11 +440,58 @@ DELETE {{host}}/api/companies/{{companyId}}
 
 
 ############################################################
+# Security boundary — the read-only guarantee, exercised
+############################################################
+
+### 401 — no credential at all, and it must be JSON rather than a redirect to Google
+GET {{host}}/api/applications
+
+> {%
+    client.test("401 as problem+json, not a 302", function () {
+        client.assert(response.status === 401, "expected 401, got " + response.status);
+        client.assert(response.body.status === 401, "body is not a ProblemDetail");
+    });
+%}
+
+### 401 — a wrong bearer token
+GET {{host}}/api/applications
+Authorization: Bearer definitely-not-the-token
+
+### 403 — a VALID bearer token attempting a write
+# The distinction matters: 403 (not 401) says the token was accepted and the operation was
+# refused. CLAUDE.md §14 lists writes from the MCP server as an explicit non-goal, and this
+# is the single denyAll() that enforces it.
+POST {{host}}/api/companies
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "MCP Should Never Create This" }
+
+> {%
+    client.test("the MCP token cannot write", function () {
+        client.assert(response.status === 403,
+                      "expected 403 — the read-only guarantee is broken if this is 2xx");
+    });
+%}
+
+### 403 — the same for a stage sub-resource write
+DELETE {{host}}/api/applications/{{applicationId}}/stages/{{stageId}}
+Authorization: Bearer {{token}}
+
+### 200 — /api/me tells the SPA who is signed in
+GET {{host}}/api/me
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+
+############################################################
 # Cleanup — run these to reset between passes
 ############################################################
 
 ### Delete the rejected application
 DELETE {{host}}/api/applications/{{rejectedApplicationId}}
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}
 
 ### Delete the main application
 DELETE {{host}}/api/applications/{{applicationId}}
+Cookie: JSESSIONID={{session}}; XSRF-TOKEN={{xsrf}}
+X-XSRF-TOKEN: {{xsrf}}

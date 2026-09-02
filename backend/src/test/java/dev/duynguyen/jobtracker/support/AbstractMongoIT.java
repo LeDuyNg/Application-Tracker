@@ -24,7 +24,19 @@ import org.testcontainers.utility.DockerImageName;
  * <p>Image is {@code mongo:8} to match the Atlas major version — testing against 7 and
  * deploying to 8 is how behavioural differences reach production undetected.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+        // Phase 2 wires oauth2Login(), which needs a ClientRegistrationRepository — and Boot
+        // only creates one when a registration is configured. Without these two lines every
+        // @SpringBootTest fails at context creation, not just the security ones. The values
+        // are never used: no test completes a Google round trip.
+        "spring.security.oauth2.client.registration.google.client-id=test-client-id",
+        "spring.security.oauth2.client.registration.google.client-secret=test-client-secret",
+
+        // A known token so SecurityIT can present the right one and the wrong one. Real
+        // tokens live in backend/config/application-local.yml, which tests never read.
+        "app.mcp-token=test-mcp-token-0123456789abcdef",
+        "app.allowed-emails=allowed@example.com",
+})
 public abstract class AbstractMongoIT {
 
     @ServiceConnection

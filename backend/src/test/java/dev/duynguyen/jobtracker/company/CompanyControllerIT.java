@@ -1,5 +1,6 @@
 package dev.duynguyen.jobtracker.company;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -15,12 +16,14 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.jayway.jsonpath.JsonPath;
 
+import dev.duynguyen.jobtracker.common.TimeService;
 import dev.duynguyen.jobtracker.support.AbstractMongoIT;
 
 /**
@@ -32,10 +35,29 @@ import dev.duynguyen.jobtracker.support.AbstractMongoIT;
  * CRUD is here for coverage; those two are here because breaking them corrupts data quietly.
  */
 @AutoConfigureMockMvc
+// Phase 2 gates every /api/** route behind a session. These tests are about the
+// endpoints, not the login, so they run as an already-authenticated user; SecurityIT
+// is where the gate itself is tested.
+@WithMockUser
 class CompanyControllerIT extends AbstractMongoIT {
 
     @Autowired private MockMvc mvc;
     @Autowired private MongoTemplate mongo;
+    @Autowired private TimeService time;
+
+    /**
+     * Today <strong>in {@code app.timezone}</strong>, not in the JVM's default zone.
+     *
+     * <p>These are not interchangeable and the difference is invisible for most of the
+     * day. This suite ran green for hours using {@code LocalDate.now()} and started
+     * failing at 21:00 Pacific — the moment it became tomorrow in New York — with
+     * {@code daysOverdue} off by exactly one. The app computes every relative date
+     * boundary in the owner's timezone (SCHEMA.md §7); a test asserting on those
+     * boundaries has to use the same clock or it is testing the laptop's location.
+     */
+    private LocalDate today() {
+        return time.today();
+    }
 
     @BeforeEach
     void setUp() {
@@ -44,7 +66,7 @@ class CompanyControllerIT extends AbstractMongoIT {
     }
 
     private String create(String name) throws Exception {
-        String body = mvc.perform(post("/api/companies")
+        String body = mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "%s" }""".formatted(name)))
@@ -54,7 +76,7 @@ class CompanyControllerIT extends AbstractMongoIT {
     }
 
     private String createApplicationAt(String companyId, String role) throws Exception {
-        String body = mvc.perform(post("/api/applications")
+        String body = mvc.perform(post("/api/applications").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -62,7 +84,7 @@ class CompanyControllerIT extends AbstractMongoIT {
                                   "role": "%s",
                                   "appliedDate": "%s",
                                   "source": "COLD_APPLY"
-                                }""".formatted(companyId, role, LocalDate.now().minusDays(5))))
+                                }""".formatted(companyId, role, today().minusDays(5))))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.read(body, "$.id");
@@ -71,7 +93,7 @@ class CompanyControllerIT extends AbstractMongoIT {
     @Test
     @DisplayName("201 with a Location header, and contacts round-trip")
     void createWithContacts() throws Exception {
-        mvc.perform(post("/api/companies")
+        mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -95,7 +117,7 @@ class CompanyControllerIT extends AbstractMongoIT {
     @Test
     @DisplayName("400 on a blank name, and on a contact with a malformed email")
     void validation() throws Exception {
-        mvc.perform(post("/api/companies")
+        mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "  " }"""))
@@ -104,7 +126,7 @@ class CompanyControllerIT extends AbstractMongoIT {
 
         // @Valid on the contacts list is what makes validation recurse into it — without
         // that annotation this case passes silently.
-        mvc.perform(post("/api/companies")
+        mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -121,7 +143,7 @@ class CompanyControllerIT extends AbstractMongoIT {
     void duplicateName() throws Exception {
         create("Stripe");
 
-        mvc.perform(post("/api/companies")
+        mvc.perform(post("/api/companies").with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "stripe" }"""))
@@ -153,7 +175,7 @@ class CompanyControllerIT extends AbstractMongoIT {
         String applicationId = createApplicationAt(companyId, "Backend Engineer");
         createApplicationAt(companyId, "Infrastructure Engineer");
 
-        mvc.perform(put("/api/companies/{id}", companyId)
+        mvc.perform(put("/api/companies/{id}", companyId).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 { "name": "Meta" }"""))
@@ -177,12 +199,12 @@ class CompanyControllerIT extends AbstractMongoIT {
 
         // Cascading here would destroy interview history to satisfy one click, so the
         // service refuses and says how many are in the way.
-        mvc.perform(delete("/api/companies/{id}", companyId))
+        mvc.perform(delete("/api/companies/{id}", companyId).with(csrf()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("1 application")));
 
-        mvc.perform(delete("/api/applications/{id}", applicationId)).andExpect(status().isNoContent());
-        mvc.perform(delete("/api/companies/{id}", companyId)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/applications/{id}", applicationId).with(csrf())).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/companies/{id}", companyId).with(csrf())).andExpect(status().isNoContent());
         mvc.perform(get("/api/companies/{id}", companyId)).andExpect(status().isNotFound());
     }
 }
